@@ -157,27 +157,41 @@ impl Dialog {
                 vec![Text { key: "name", label: "Name:" }],
                 json!({"name": app.session.active().and_then(|d| d.wb.active().map(|s| s.name.clone()))}),
             ),
-            "banglaConverter" => Dialog::form(
-                "banglaConverter",
-                "Bangla Converter (Unicode ⇄ ANSI)",
-                "tools.banglaConvert",
-                vec![
-                    Choice {
-                        key: "direction",
-                        label: "Conversion Direction",
-                        options: vec![("unicodeToAnsi", "Unicode to ANSI (SutonnyMJ)"), ("ansiToUnicode", "ANSI (SutonnyMJ) to Unicode")],
-                    },
-                    Choice {
-                        key: "target",
-                        label: "Target",
-                        options: vec![("selection", "Selected cells"), ("sheet", "Current sheet"), ("document", "Entire workbook")],
-                    },
-                ],
-                json!({
-                    "direction": "unicodeToAnsi",
-                    "target": "selection",
-                }),
-            ),
+            "banglaConverter" => {
+                let initial_text = app
+                    .session
+                    .active()
+                    .and_then(|d| {
+                        let c = d.selection.active;
+                        let sh = d.wb.active()?;
+                        let val = sh.value_ref(c)?;
+                        match val {
+                            gridcraft_engine::core::Value::Text(t) => Some(t.to_string()),
+                            gridcraft_engine::core::Value::Number(n) => Some(n.to_string()),
+                            _ => None,
+                        }
+                    })
+                    .unwrap_or_default();
+                let initial_result = if initial_text.chars().any(|c| ('\u{0980}'..='\u{09FF}').contains(&c)) {
+                    gridcraft_engine::cmd::bangla::unicode_to_ansi(&initial_text)
+                } else if !initial_text.is_empty() {
+                    gridcraft_engine::cmd::bangla::ansi_to_unicode(&initial_text)
+                } else {
+                    String::new()
+                };
+                Dialog::form(
+                    "banglaConverter",
+                    "Bangla Converter (Unicode ⇄ ANSI)",
+                    "tools.banglaConvert",
+                    vec![],
+                    json!({
+                        "source_text": initial_text,
+                        "result_text": initial_result,
+                        "direction": "unicodeToAnsi",
+                        "target": "selection",
+                    }),
+                )
+            }
             "moveSheet" => {
                 let sheets: Vec<String> = app.session.active().map(|d| d.wb.sheets.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
                 let mut d = Dialog::form(
@@ -1048,7 +1062,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let mut win_open = true;
     let mut confirm = false;
     let width = match d.name.as_str() {
-        "formatCells" => 560.0,
+        "formatCells" | "banglaConverter" => 560.0,
         "about" => 660.0,
         "insertFunction" | "commandSearch" | "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
@@ -1083,6 +1097,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "solver" => solver(ui, &mut d, &mut confirm, &mut open),
                 "solverResults" => solver_results(app, ui, &mut d, &mut open),
                 "spelling" => spelling(app, ui, &mut d, &mut open),
+                "banglaConverter" => bangla_converter(app, ui, &mut d, &mut open),
                 "agents" => {
                     ui.label("GridCraft is fully drivable by agents. Every menu item, button and gesture is a command:");
                     ui.add_space(4.0);
@@ -2683,6 +2698,95 @@ fn spelling(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mut bo
     });
 }
 
+fn bangla_converter(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
+    let t = crate::theme::Tokens::get(ui.ctx());
+    ui.set_min_width(540.0);
+    ui.label(
+        egui::RichText::new("Convert text and spreadsheet cells between modern Unicode and legacy Bijoy/SutonnyMJ ANSI.")
+            .color(t.text_dim),
+    );
+    ui.add_space(8.0);
+
+    let mut source = d.values.get("source_text").and_then(Json::as_str).unwrap_or_default().to_string();
+    let mut result = d.values.get("result_text").and_then(Json::as_str).unwrap_or_default().to_string();
+
+    ui.label(egui::RichText::new("Input Text:").strong());
+    if ui.add(egui::TextEdit::multiline(&mut source).desired_rows(4).desired_width(f32::INFINITY)).changed() {
+        d.values.insert("source_text".into(), json!(source));
+    }
+
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
+        if ui.button("Unicode → ANSI (SutonnyMJ)").clicked() {
+            result = gridcraft_engine::cmd::bangla::unicode_to_ansi(&source);
+            d.values.insert("result_text".into(), json!(result));
+        }
+        if ui.button("ANSI (SutonnyMJ) → Unicode").clicked() {
+            result = gridcraft_engine::cmd::bangla::ansi_to_unicode(&source);
+            d.values.insert("result_text".into(), json!(result));
+        }
+        if ui.button("Avro Phonetic → Unicode").clicked() {
+            result = gridcraft_engine::cmd::bangla::phonetic_transliterate(&source);
+            d.values.insert("result_text".into(), json!(result));
+        }
+        if ui.button("Clear").clicked() {
+            source.clear();
+            result.clear();
+            d.values.insert("source_text".into(), json!(""));
+            d.values.insert("result_text".into(), json!(""));
+        }
+    });
+
+    ui.add_space(8.0);
+    ui.label(egui::RichText::new("Converted Result:").strong());
+    if ui.add(egui::TextEdit::multiline(&mut result).desired_rows(4).desired_width(f32::INFINITY)).changed() {
+        d.values.insert("result_text".into(), json!(result));
+    }
+
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
+        if ui.button("📋 Copy Result").clicked() && !result.is_empty() {
+            ui.ctx().copy_text(result.clone());
+            app.toast = Some(("Copied converted text to clipboard".into(), crate::now_ms()));
+        }
+        if ui.button("Insert in Active Cell").clicked() && !result.is_empty() {
+            app.run_or_alert("cell.set", json!({"input": result}));
+            *open = false;
+        }
+    });
+
+    ui.add_space(10.0);
+    ui.separator();
+    ui.add_space(4.0);
+
+    ui.label(egui::RichText::new("Batch Convert Worksheet Cells:").strong());
+    ui.horizontal_wrapped(|ui| {
+        if ui.button("Selection → Unicode").on_hover_text("Convert selected cells from SutonnyMJ ANSI to Unicode").clicked() {
+            let _ = app.run("tools.banglaConvert", json!({"direction": "ansiToUnicode", "target": "selection"}));
+            *open = false;
+        }
+        if ui.button("Selection → ANSI").on_hover_text("Convert selected cells from Unicode to SutonnyMJ ANSI").clicked() {
+            let _ = app.run("tools.banglaConvert", json!({"direction": "unicodeToAnsi", "target": "selection"}));
+            *open = false;
+        }
+        if ui.button("Active Sheet → Unicode").on_hover_text("Convert all text in the active worksheet to Unicode").clicked() {
+            let _ = app.run("tools.banglaConvert", json!({"direction": "ansiToUnicode", "target": "sheet"}));
+            *open = false;
+        }
+        if ui.button("Entire Workbook → Unicode").on_hover_text("Convert all sheets in the workbook to Unicode").clicked() {
+            let _ = app.run("tools.banglaConvert", json!({"direction": "ansiToUnicode", "target": "document"}));
+            *open = false;
+        }
+    });
+
+    ui.add_space(8.0);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if ui.button("Close").clicked() {
+            *open = false;
+        }
+    });
+}
+
 #[cfg(test)]
 mod data_validation_tests {
     use super::*;
@@ -2758,5 +2862,16 @@ mod tests {
         let d = Dialog::open(&mut app, "dataValidation", json!({})).unwrap();
         assert_eq!(d.values["type"], "list");
         assert!(d.values.get("formula1").is_none());
+    }
+
+    #[test]
+    fn bangla_converter_dialog_opens_and_preloads_cell_text() {
+        let mut session = gridcraft_engine::Session::default();
+        session.new_workbook();
+        let mut app = SheetApp::new(session, Default::default());
+        app.run("cell.set", json!({"cell": "A1", "input": "আমার সোনার বাংলা"})).unwrap();
+        let d = Dialog::open(&mut app, "banglaConverter", json!({})).unwrap();
+        assert_eq!(d.values["source_text"], "আমার সোনার বাংলা");
+        assert!(!d.values["result_text"].as_str().unwrap().is_empty());
     }
 }
