@@ -132,7 +132,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
-| 2026-10-15 | Native Bengali typing (Avro phonetic, Jatiya and Bijoy ANSI) and a cell converter; Bijoy ANSI text is converted to Unicode when a workbook opens; the web app keeps its active document across a browser refresh; PDF print draws Bengali as shaped vector glyphs with the bundled Noto Sans Bengali |
+| 2026-10-15 | Native Bengali typing (Avro phonetic, Jatiya and Bijoy ANSI) and two-way cell/sheet converter; Bijoy ANSI to Unicode on open; Taka (৳) currency and Bengali numerals ([$-bn-BD]) with South Asian lakh/crore commas; dedicated Bangla ribbon tab & quick-access button beside Automate; mobile touch pan & pinch zoom; document persistence across browser refresh; shaped vector Bengali glyphs in PDF print |
 | 2026-10-14 | Release 0.7.0 |
 | 2026-10-12 | Rows auto-fit oversized fonts: opening a file and whole-row/column formatting grow non-custom rows to their tallest font (#833) |
 | 2026-10-12 | Number formats: parsing a format code is linear in its length (long runs of `[`, `,` or `/` no longer take quadratic time), and an unclosed `[` is a literal when splitting sections as well as when tokenizing (#810) |

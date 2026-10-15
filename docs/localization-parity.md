@@ -25,10 +25,12 @@ right-to-left sheets and full complex-script support. Part of
   separator, en-US number and date formats (`crates/numfmt` says "en-US only"). Users ask for
   localized function names and `;` separators (#45). German with localized numbers and formulas
   is in PR #163 (open).
-- **Bengali.** Native typing (Avro phonetic, Jatiya and Bijoy ANSI) with a cell converter. Bijoy
-  ANSI text is converted to Unicode when a workbook opens. The bundled Noto Sans Bengali is the
-  Bengali font in the app and the glyph source for PDF print, which draws shaped vector glyphs.
-  Arabic and Devanagari shaping are still missing.
+- **Bengali.** Native typing (Avro phonetic, Jatiya and Bijoy ANSI) with a two-way cell/sheet converter. Bijoy
+  ANSI text is converted to Unicode when a workbook opens. Taka (৳) currency and Bengali numerals
+  with South Asian lakh/crore commas (`[$-bn-BD]`). Dedicated Bangla ribbon tab and quick-access
+  button beside Automate. The bundled Noto Sans Bengali is the Bengali font in the app and the
+  glyph source for PDF print, which draws shaped vector glyphs. Arabic and Devanagari shaping are
+  still missing.
 - **Script support.** System-font fallback for CJK, Thai and Hebrew landed in #38 (closes #32;
   #142 is still open pending confirmation). Complex-text shaping covers Bengali only: Arabic and
   Devanagari don't join or reorder, and there is no bidirectional layout. **Sheet Right-to-Left**
@@ -82,7 +84,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-15 | minor | Bengali: native typing (Avro, Jatiya, Bijoy ANSI) and cell converter; Bijoy ANSI to Unicode on open; Bengali glyphs in PDF print; bundled Noto Sans Bengali |
+| 2026-10-15 | minor | Bengali: native typing (Avro, Jatiya, Bijoy ANSI) and two-way converter; Bijoy ANSI to Unicode on open; Taka (৳) currency & Bengali digits ([$-bn-BD]); dedicated Bangla ribbon tab & quick-access button; mobile touch pan; Bengali glyphs in PDF print; bundled Noto Sans Bengali |
 | 2026-10-12 | minor | Format Cells looks up its tabs, labels, options and note through `Language::tr` (Fill tab keyed `Format Cells\|Fill`); dialog titles and OK/Cancel too. Labels already in a table (Number, Currency, Fill…) show translated; the rest fall back to English until the tables add them |
 | 2026-10-12 | minor | Brazilian Portuguese catalog (`i18n/pt.rs`) grows from 377 to 923 entries: every key the other catalogs translate, including the dialog strings #669 starts looking up (~42%) |
 | 2026-10-11 | minor | German ribbon catalog (`i18n/de.rs`, 266 labels, ~12%); `de` locale tags (de-DE, de-AT, de-CH…) resolve to German. PR #163 (localized German formulas/numbers) still open |
