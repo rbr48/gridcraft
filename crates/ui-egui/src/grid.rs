@@ -2732,6 +2732,9 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let h = (size * 1.3 * lines + 4.0).max(rect.height());
     // Grows to the left on a right-to-left sheet.
     let erect = geo.mirror_rect(Rect::from_min_size(rect.min, vec2(w, h)));
+    if !ed.from_formula_bar && let Some(ed) = app.editor.as_mut() {
+        ed.screen_rect = Some(erect);
+    }
     let fill = match st.fill.pattern {
         PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
         _ => Color32::WHITE,

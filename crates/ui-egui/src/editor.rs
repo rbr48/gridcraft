@@ -41,6 +41,8 @@ pub struct EditState {
     pub completion: Option<String>,
     /// Move the caret to the end on the next frame.
     pub caret_to_end: bool,
+    /// Physical screen rectangle of the active editor widget (in-cell or formula bar).
+    pub screen_rect: Option<egui::Rect>,
 }
 
 impl EditState {
@@ -62,6 +64,7 @@ impl EditState {
             sync_caret: true,
             caret_to_end: true,
             completion: None,
+            screen_rect: None,
         }
     }
 

@@ -41,6 +41,9 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
                 let id = egui::Id::new("gridcraft.formula_bar");
                 let editing_here = app.editor.as_ref().is_some_and(|e| e.from_formula_bar);
                 if app.editor.is_some() {
+                    if editing_here && let Some(ed) = app.editor.as_mut() {
+                        ed.screen_rect = Some(field);
+                    }
                     editor_widget(app, &mut child, id, theme::ui_font(13.0), expanded, field.width() - 12.0);
                 } else {
                     // Show the active cell's content; clicking starts editing in the bar.

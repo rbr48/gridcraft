@@ -533,12 +533,18 @@ pub fn show_candidate_popup(app: &mut SheetApp, ctx: &Context) {
         return;
     }
 
-    let popup_pos = ctx.input(|i| i.pointer.hover_pos().unwrap_or_else(|| egui::pos2(200.0, 100.0)));
+    let popup_pos = if let Some(ed) = &app.editor
+        && let Some(rect) = ed.screen_rect
+    {
+        rect.left_bottom() + egui::vec2(0.0, 4.0)
+    } else {
+        ctx.input(|i| i.pointer.hover_pos().unwrap_or_else(|| egui::pos2(200.0, 100.0))) + egui::vec2(10.0, 20.0)
+    };
 
     let t = theme::Tokens::get(ctx);
     let mut selected_cand: Option<String> = None;
 
-    egui::Area::new(egui::Id::new("gridcraft.bangla_candidates")).order(egui::Order::Tooltip).fixed_pos(popup_pos + egui::vec2(10.0, 20.0)).show(
+    egui::Area::new(egui::Id::new("gridcraft.bangla_candidates")).order(egui::Order::Tooltip).fixed_pos(popup_pos).show(
         ctx,
         |ui| {
             egui::Frame::popup(ui.style()).fill(t.window).stroke(egui::Stroke::new(1.0, t.separator)).show(ui, |ui| {
