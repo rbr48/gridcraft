@@ -323,11 +323,13 @@ GridCraft is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APAC
 Copyright (c) 2026 ArtCraft Team and the GridCraft contributors. Required notices are in [NOTICE](NOTICE).
 
 Bundled fonts, icons, images and other assets keep their own open licenses; each one is listed
-with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md).
+with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md). One data file, the Bangla
+phonetic word list in `crates/engine/src/cmd/bangla_vocab.rs`, is under the Mozilla Public License
+1.1 ([LICENSE-MPL-1.1.txt](LICENSE-MPL-1.1.txt)).
 
 All UI icons are drawn in code and are original; the sample workbooks and every screenshot in
-this README were made with GridCraft itself. GridCraft bundles no fonts: it uses the fonts
-installed on your system.
+this README were made with GridCraft itself. GridCraft bundles one font, Noto Sans Bengali (SIL
+Open Font License 1.1), for Bengali text; everything else uses the fonts installed on your system.
 
 The ArtCraft name, wordmark and logos in [`docs/brand/`](docs/brand/) are trademarks of the
 ArtCraft Team and are not covered by this license. They may be used only unmodified, and only as

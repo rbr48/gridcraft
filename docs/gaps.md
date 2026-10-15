@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-12 · **Change:** minor (rows auto-fit oversized fonts on open and whole-row/column formatting) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-15 · **Change:** minor (§5 Bengali in PDF; §11 language count; §13 and §15 duplicate entries merged) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -51,10 +51,10 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 - **Estimate:** 25–35 h for beta (40–60 h full). [chart-parity.md](chart-parity.md)
 
 ### 5. Text in non-Latin scripts doesn't render or export (L)
-- **Missing:** CJK font fallback, complex shaping (Arabic, Devanagari, Thai), bidi, non-Latin PDF.
+- **Missing:** complex shaping for Arabic, Devanagari and Thai, bidi, and non-Latin PDF text other than Bengali.
 - **Evidence:** system-font fallback for CJK, Thai and Hebrew landed in #38 (closed #32); #142
   (Chinese text) awaits confirmation; #54 (symbols as boxes on Fedora); no shaping for Arabic or
-  Devanagari; PDF writer uses 14 standard fonts only.
+  Devanagari; PDF writer uses the 14 standard fonts plus Bengali (Noto Sans Bengali, shaped; 2026-10-15).
 - **Impact:** blocks most of the world's users even with an English UI.
 - **Estimate:** 12–20 h. [localization-parity.md](localization-parity.md)
 
@@ -97,7 +97,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 ## After beta
 
 ### 11. No localization at all (L)
-- Ribbon-only catalog in five languages (#31, #104, #82; ~12% of strings each); dialogs, menus and
+- Ribbon-only catalogs in six languages (ja, zh, ko, pt-BR, ru, de; #31, #104, #82; ~12% of strings each, pt-BR ~42%); dialogs, menus and
   messages English; en-US function names and separators (#45); German in PR #163. **Estimate:**
   100–165 h including #5. [localization-parity.md](localization-parity.md)
 
@@ -106,14 +106,12 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
   data model (`data.fromWeb`, `data.relationships` missing). **Estimate:** 60–100 h.
 
 ### 13. Analysis tools: Solver, Analysis ToolPak, Forecast Sheet (F)
-- `data.solver`, `data.analysisToolPak` missing. Forecast Sheet (`data.forecastSheet`) and the
-  FORECAST.ETS family are in, including Forecast Start (hindcast, #785). **Estimate:** 15–25 h.
 - Solver (`data.solver`, #327) has Simplex LP with integer/binary branch and bound, a local
   nonlinear method (augmented Lagrangian, not GRG), the Evolutionary method, and Answer and
   Limits reports; AllDifferent constraints, the Solver Options dialog, the Sensitivity and
   Population reports and Load/Save Model remain. The Analysis ToolPak
   (`data.analysisToolPak`) has 13 of 19 tools. Forecast Sheet (`data.forecastSheet`) and the
-  FORECAST.ETS family are in; the sheet has no Forecast Start (hindcast) option yet. **Estimate:** 12–20 h.
+  FORECAST.ETS family are in, including Forecast Start (hindcast, #785). **Estimate:** 12–20 h.
 
 ### 14. Page Layout view and print polish (U, F)
 - Page Layout view landed (#329): paper view with rulers and in-place header/footer editing.
@@ -121,9 +119,6 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 ### 15. Remaining functions and an oracle suite (F)
 - 18 missing, 9 stubs; no Excel-computed oracle corpus; #137, #138. **Estimate:** 16–26 h.
-- 20 missing, 9 stubs; no Excel-computed oracle corpus; #137, #138. **Estimate:** 17–29 h.
-- 21 missing, 9 stubs; no Excel-computed oracle corpus; #137, #138. **Estimate:** 18–30 h.
-- 18 missing, 9 stubs; no Excel-computed oracle corpus; #137, #138. **Estimate:** 18–30 h.
   [function-parity.md](function-parity.md)
 
 ### 16. Collaboration and review (F)
@@ -168,6 +163,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | §5 Bengali shaped and drawn in PDF; §11 six ribbon languages; §13 duplicate lines merged (Solver is in the registry, Forecast Start landed); §15 duplicate counts merged to the function table (18 missing, 9 stubs) |
 | 2026-10-12 | minor | rows auto-fit oversized fonts on open and whole-row/column formatting (#833) |
 | 2026-10-12 | minor | Page Layout view: dragging margins on the rulers (#792) removed from the §14 remainder |
 | 2026-10-12 | minor | §13: Forecast Sheet Forecast Start (hindcast) landed (#785) |
