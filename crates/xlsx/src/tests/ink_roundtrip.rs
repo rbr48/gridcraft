@@ -192,3 +192,27 @@ fn oversized_polyline_is_not_truncated_into_different_ink() {
     let wb = read_drawing(&drawing().replace(POINTS, &commands));
     assert!(wb.sheet(0).unwrap().shapes.iter().all(|s| s.kind != ShapeKind::Ink));
 }
+
+#[test]
+fn grouped_shapes_are_unpacked_into_member_shapes() {
+    let xml = r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <xdr:twoCellAnchor>
+            <xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
+            <xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+            <xdr:grpSp>
+                <xdr:nvGrpSpPr><xdr:cNvPr id="1" name="Group 1"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr>
+                <xdr:grpSpPr/>
+                <xdr:sp>
+                    <xdr:nvSpPr><xdr:cNvPr id="2" name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr>
+                    <xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr>
+                    <xdr:txBody><a:p><a:r><a:t>Grouped Text</a:t></a:r></a:p></xdr:txBody>
+                </xdr:sp>
+            </xdr:grpSp>
+            <xdr:clientData/>
+        </xdr:twoCellAnchor>
+    </xdr:wsDr>"#;
+    let wb = read_drawing(xml);
+    let shapes = &wb.sheet(0).unwrap().shapes;
+    assert_eq!(shapes.len(), 1);
+    assert_eq!(shapes[0].text, "Grouped Text");
+}

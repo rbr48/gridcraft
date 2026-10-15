@@ -41,9 +41,20 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #555;
-      font: 14px system-ui, sans-serif;
+      color: #374151;
+      font: 14px system-ui, -apple-system, sans-serif;
       pointer-events: none;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3.5px solid rgba(16, 124, 65, 0.18);
+      border-top-color: #107c41;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     #back_to_portal {
       position: fixed;
@@ -80,10 +91,66 @@
       }
     }
   </style>
+  <script>
+    (function() {
+      const origFetch = window.fetch;
+      window.fetch = async function(...args) {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url);
+        if (url && url.includes('.wasm')) {
+          const barContainer = document.getElementById('loading_progress_bar_container');
+          const bar = document.getElementById('loading_progress_bar');
+          const status = document.getElementById('loading_status');
+          if (barContainer) barContainer.style.display = 'block';
+
+          const response = await origFetch.apply(this, args);
+          if (!response.ok) return response;
+
+          const contentLength = response.headers.get('content-length');
+          const total = contentLength ? parseInt(contentLength, 10) : 0;
+          let loaded = 0;
+
+          const reader = response.body.getReader();
+          const stream = new ReadableStream({
+            async start(controller) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                loaded += value.byteLength;
+                if (total > 0) {
+                  const pct = Math.min(100, Math.round((loaded / total) * 100));
+                  if (bar) bar.style.width = pct + '%';
+                  if (status) status.innerText = pct + '% (' + (loaded / (1024 * 1024)).toFixed(1) + ' MB / ' + (total / (1024 * 1024)).toFixed(1) + ' MB)';
+                } else {
+                  if (status) status.innerText = (loaded / (1024 * 1024)).toFixed(1) + ' MB downloaded';
+                }
+                controller.enqueue(value);
+              }
+              if (status) status.innerText = 'Starting engine...';
+              controller.close();
+            }
+          });
+
+          return new Response(stream, {
+            headers: response.headers,
+            status: response.status,
+            statusText: response.statusText,
+          });
+        }
+        return origFetch.apply(this, args);
+      };
+    })();
+  </script>
 </head>
 <body>
   <canvas id="gridcraft_canvas"></canvas>
-  <div id="gridcraft_loading">Loading GridCraft&hellip;</div>
+  <div id="gridcraft_loading">
+    <div class="spinner"></div>
+    <div id="loading_title" style="font-weight: 600; font-size: 15px; margin-top: 14px; color: #111827;">Loading GridCraft&hellip;</div>
+    <div id="loading_progress_bar_container" style="width: 220px; height: 5px; background: #e5e7eb; border-radius: 999px; margin-top: 12px; overflow: hidden; display: none;">
+      <div id="loading_progress_bar" style="width: 0%; height: 100%; background: #107c41; border-radius: 999px; transition: width 0.15s ease;"></div>
+    </div>
+    <div id="loading_status" style="font-size: 12px; color: #6b7280; margin-top: 6px;"></div>
+  </div>
   <a href="https://office.izhaanintellect.fun" id="back_to_portal">
     <span style="color: #107c41; font-weight: bold;">←</span> Office Portal
   </a>

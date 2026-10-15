@@ -142,55 +142,74 @@ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(
             })
             .collect();
         for obj in objs {
-            match obj.name.as_str() {
-                "pic" => {
-                    let Some(rid) = obj.path(&["blipFill", "blip"]).and_then(|b| b.attr("embed")) else { continue };
-                    let Some(rel) = rels.iter().find(|r| r.id == rid && !r.external) else {
-                        cx.warn("a linked (not embedded) picture was skipped");
-                        continue;
-                    };
-                    let target = rel.target.clone();
-                    let Some(data) = cx.pkg.read(&target)? else {
-                        cx.warn(format!("missing picture {target}"));
-                        continue;
-                    };
-                    let alt = obj.path(&["nvPicPr", "cNvPr"]).and_then(|c| c.attr("descr")).unwrap_or("").to_string();
-                    let id = cx.next_object_id();
-                    sheet.images.push(Image { id, anchor, data, mime: mime_for(&target).to_string(), alt });
-                }
-                "graphicFrame" => {
-                    let Some(gd) = obj.path(&["graphic", "graphicData"]) else { continue };
-                    let uri = gd.attr("uri").unwrap_or("");
-                    if let Some(rid) = gd.child("chart").and_then(|c| c.attr("id")) {
-                        let Some(rel) = rels.iter().find(|r| r.id == rid) else { continue };
-                        let target = rel.target.clone();
-                        if let Some(cx_xml) = cx.optional_xml(&target)? {
-                            let chartex = uri.contains("chartex");
-                            match if chartex { crate::chartex::read_chartex(&cx_xml) } else { crate::chart::read_chart(&cx_xml) } {
-                                Some(mut ch) => {
-                                    ch.id = cx.next_object_id();
-                                    ch.anchor = anchor;
-                                    sheet.charts.push(ch);
-                                }
-                                None => cx.warn(format!("chart {target} has no supported plot and was skipped")),
-                            }
+            read_drawing_object(cx, obj, anchor, &rels, sheet, 0)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_drawing_object(
+    cx: &mut Ctx<'_>,
+    obj: &El,
+    anchor: Anchor,
+    rels: &[crate::package::Rel],
+    sheet: &mut Sheet,
+    depth: usize,
+) -> Result<(), IoError> {
+    if depth > 10 {
+        return Ok(());
+    }
+    match obj.name.as_str() {
+        "pic" => {
+            let Some(rid) = obj.path(&["blipFill", "blip"]).and_then(|b| b.attr("embed")) else { return Ok(()) };
+            let Some(rel) = rels.iter().find(|r| r.id == rid && !r.external) else {
+                cx.warn("a linked (not embedded) picture was skipped");
+                return Ok(());
+            };
+            let target = rel.target.clone();
+            let Some(data) = cx.pkg.read(&target)? else {
+                cx.warn(format!("missing picture {target}"));
+                return Ok(());
+            };
+            let alt = obj.path(&["nvPicPr", "cNvPr"]).and_then(|c| c.attr("descr")).unwrap_or("").to_string();
+            let id = cx.next_object_id();
+            sheet.images.push(Image { id, anchor, data, mime: mime_for(&target).to_string(), alt });
+        }
+        "graphicFrame" => {
+            let Some(gd) = obj.path(&["graphic", "graphicData"]) else { return Ok(()) };
+            let uri = gd.attr("uri").unwrap_or("");
+            if let Some(rid) = gd.child("chart").and_then(|c| c.attr("id")) {
+                let Some(rel) = rels.iter().find(|r| r.id == rid) else { return Ok(()) };
+                let target = rel.target.clone();
+                if let Some(cx_xml) = cx.optional_xml(&target)? {
+                    let chartex = uri.contains("chartex");
+                    match if chartex { crate::chartex::read_chartex(&cx_xml) } else { crate::chart::read_chart(&cx_xml) } {
+                        Some(mut ch) => {
+                            ch.id = cx.next_object_id();
+                            ch.anchor = anchor;
+                            sheet.charts.push(ch);
                         }
-                    } else if uri.contains("chartex") || uri.contains("chartEx") {
-                        cx.warn("a histogram, waterfall, treemap… chart without its chart part was skipped");
-                    } else {
-                        cx.warn("an embedded object (SmartArt, OLE…) was skipped");
+                        None => cx.warn(format!("chart {target} has no supported plot and was skipped")),
                     }
                 }
-                "sp" | "cxnSp" => {
-                    if let Some(s) = read_shape(obj, anchor) {
-                        let id = cx.next_object_id();
-                        sheet.shapes.push(Shape { id, ..s });
-                    }
-                }
-                "grpSp" => cx.warn("grouped shapes are not supported and were skipped"),
-                _ => {}
+            } else if uri.contains("chartex") || uri.contains("chartEx") {
+                cx.warn("a histogram, waterfall, treemap… chart without its chart part was skipped");
+            } else {
+                cx.warn("an embedded object (SmartArt, OLE…) was skipped");
             }
         }
+        "sp" | "cxnSp" => {
+            if let Some(s) = read_shape(obj, anchor) {
+                let id = cx.next_object_id();
+                sheet.shapes.push(Shape { id, ..s });
+            }
+        }
+        "grpSp" => {
+            for child in &obj.children {
+                read_drawing_object(cx, child, anchor, rels, sheet, depth + 1)?;
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
