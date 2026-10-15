@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-15 · **Change:** minor (§5 Bengali in PDF; §11 language count; §13 and §15 duplicate entries merged) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-15 · **Change:** minor (§5 Bengali in PDF; §6 calc items checked against tests; §11 language count; §13 and §15 duplicate entries merged) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -59,8 +59,12 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 - **Estimate:** 12–20 h. [localization-parity.md](localization-parity.md)
 
 ### 6. Calculation correctness bugs (F)
-- **Missing:** 15-significant-digit equality; spill updates after structural edits and cleared
-  blockers; 3-D span deletion; qualified names after sheet rename.
+- **Missing:** none of the four items named here reproduces on `main` (checked 2026-10-15).
+  15-significant-digit equality: `compare_numbers` rounds to 15 digits (`0.1+0.2=0.3` is TRUE;
+  `crates/core/src/value.rs`). 3-D spans shrink on sheet delete (`crates/formula/src/adjust.rs`,
+  tests in `crates/formula/src/tests.rs`). Qualified names follow a sheet rename
+  (`rename_sheet_updates_qualified_names`). Spills move with structural edits and unblock when a
+  blocker clears (`crates/engine/src/tests.rs`). The issue and PR evidence below was not re-checked.
 - **Evidence:** #57, #133, #139, #140, #134; PRs #148, #155, #156, #157. Iterative calculation
   for circular references landed (no Options dialog yet).
 - **Impact:** wrong numbers are worse than missing features.
@@ -163,6 +167,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | §6 four named calc items checked against code and tests; none missing, so the entry no longer lists them as gaps |
 | 2026-10-15 | minor | §5 Bengali shaped and drawn in PDF; §11 six ribbon languages; §13 duplicate lines merged (Solver is in the registry, Forecast Start landed); §15 duplicate counts merged to the function table (18 missing, 9 stubs) |
 | 2026-10-12 | minor | rows auto-fit oversized fonts on open and whole-row/column formatting (#833) |
 | 2026-10-12 | minor | Page Layout view: dragging margins on the rulers (#792) removed from the §14 remainder |
