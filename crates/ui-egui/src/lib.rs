@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod backstage;
+pub mod bangla;
 mod border_preview;
 mod cell_pictures;
 pub mod chartview;
@@ -252,6 +253,8 @@ pub struct SheetApp {
     /// Transient ribbon keyboard navigation; never saved with UI preferences.
     pub keytips: keytips::KeyTips,
     pub(crate) shots: control::Shots,
+    /// Native Bangla IME state and suggestion candidate tracking.
+    pub bangla: bangla::BanglaUiState,
     /// Chart selected on the sheet (id).
     pub selected_chart: Option<u32>,
     /// The system clipboard's text when GridCraft last copied without publishing to it (a
@@ -302,6 +305,7 @@ impl SheetApp {
             name_box: None,
             keytips: keytips::KeyTips::default(),
             shots: control::Shots::default(),
+            bangla: bangla::BanglaUiState::default(),
             selected_chart: None,
             clipboard_text_at_copy: None,
             cut_text: None,
@@ -1088,6 +1092,28 @@ impl SheetApp {
         if let Some(mut batch) = self.synthetic.pop_front() {
             raw.events.append(&mut batch);
         }
+
+        // Native Bangla IME shortcuts and typing interception
+        let mut i = 0;
+        while i < raw.events.len() {
+            let mut remove = false;
+            match &raw.events[i] {
+                egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                    remove = bangla::handle_key_event(self, *key, *modifiers);
+                }
+                egui::Event::Text(t) => {
+                    remove = self.editor.is_some()
+                        && self.session.bangla_mode != gridcraft_engine::cmd::bangla::BanglaMode::Off
+                        && bangla::handle_text_event(self, t);
+                }
+                _ => {}
+            }
+            if remove {
+                raw.events.remove(i);
+            } else {
+                i += 1;
+            }
+        }
     }
 
     /// Lays out the whole window.
@@ -1129,6 +1155,7 @@ impl SheetApp {
             });
         }
         dialogs::show(self, &ctx);
+        bangla::show_candidate_popup(self, &ctx);
         widgets::message_box(self, &ctx);
         widgets::toast(self, &ctx);
         control::issue_screenshots(self, &ctx);

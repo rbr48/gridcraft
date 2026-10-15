@@ -492,6 +492,7 @@ fn fallback_faces(han: HanOrder) -> Vec<(&'static str, Vec<(String, u32)>)> {
         ("sys-cjk-hangul", cjk_hangul()),
         ("sys-thai", thai()),
         ("sys-hebrew", hebrew()),
+        ("sys-bengali", bengali()),
         ("sys-symbols", symbols()),
         ("sys-symbols-2", symbols_more()),
     ]
@@ -618,6 +619,40 @@ fn hebrew() -> Vec<(String, u32)> {
         v.push((format!("{d}/NotoSansHebrew-Regular.ttf"), 0));
         v.push((format!("{d}/dejavu/DejaVuSans.ttf"), 0));
         v.push((format!("{d}/freefont/FreeSans.ttf"), 0));
+    }
+    v
+}
+
+/// Bengali faces. Windows ships Vrinda, Shonar Bangla, and Nirmala UI; macOS ships
+/// Bangla MN, Bangla Sangam MN, and Kohinoor Bangla; Linux usually has Noto Sans Bengali or Lohit Bengali.
+#[cfg(not(target_arch = "wasm32"))]
+fn bengali() -> Vec<(String, u32)> {
+    let mac_sys = "/System/Library/Fonts";
+    let mac_sup = "/System/Library/Fonts/Supplemental";
+    let win = std::env::var("WINDIR").map(|w| format!("{w}\\Fonts")).unwrap_or_else(|_| "C:\\Windows\\Fonts".into());
+    let lin = [
+        "/usr/share/fonts/truetype/noto",
+        "/usr/share/fonts/opentype/noto",
+        "/usr/share/fonts/truetype",
+        "/usr/share/fonts",
+        "/usr/share/fonts/truetype/lohit-bengali",
+        "/usr/share/fonts/lohit-bengali",
+    ];
+    let mut v: Vec<(String, u32)> = Vec::new();
+    v.push((format!("{win}\\vrinda.ttf"), 0));
+    v.push((format!("{win}\\shonarb.ttf"), 0));
+    v.push((format!("{win}\\Nirmala.ttf"), 0));
+    v.push((format!("{win}\\Kalpurush.ttf"), 0));
+    v.push((format!("{win}\\kalpurush.ttf"), 0));
+    v.push((format!("{win}\\Siyamrupali.ttf"), 0));
+    v.push((format!("{mac_sup}/Bangla MN.ttc"), 0));
+    v.push((format!("{mac_sup}/Bangla Sangam MN.ttc"), 0));
+    v.push((format!("{mac_sys}/KohinoorBangla.ttc"), 0));
+    for d in lin {
+        v.push((format!("{d}/NotoSansBengali-Regular.ttf"), 0));
+        v.push((format!("{d}/NotoSansBengali.ttf"), 0));
+        v.push((format!("{d}/Lohit-Bengali.ttf"), 0));
+        v.push((format!("{d}/kalpurush.ttf"), 0));
     }
     v
 }
@@ -815,11 +850,11 @@ mod tests {
         let keys = |han| fallback_faces(han).into_iter().map(|(k, _)| k).collect::<Vec<_>>();
         assert_eq!(
             keys(HanOrder::Japanese),
-            ["sys-cjk-han-ja", "sys-cjk-han-zh", "sys-cjk-hangul", "sys-thai", "sys-hebrew", "sys-symbols", "sys-symbols-2"]
+            ["sys-cjk-han-ja", "sys-cjk-han-zh", "sys-cjk-hangul", "sys-thai", "sys-hebrew", "sys-bengali", "sys-symbols", "sys-symbols-2"]
         );
         assert_eq!(
             keys(HanOrder::Chinese),
-            ["sys-cjk-han-zh", "sys-cjk-han-ja", "sys-cjk-hangul", "sys-thai", "sys-hebrew", "sys-symbols", "sys-symbols-2"]
+            ["sys-cjk-han-zh", "sys-cjk-han-ja", "sys-cjk-hangul", "sys-thai", "sys-hebrew", "sys-bengali", "sys-symbols", "sys-symbols-2"]
         );
         assert_eq!(HanOrder::of(Language::Ja), HanOrder::Japanese);
         for l in [Language::En, Language::Zh, Language::Ko, Language::Ru, Language::PtBr, Language::De, Language::Cs] {
@@ -848,12 +883,13 @@ mod tests {
         // Real render check, per script: the proportional family (what cells and the UI use) must
         // resolve a sample string to a real glyph, not the tofu replacement char. Skips a script
         // whose face is absent (a minimal machine) and fails if a face is present but not wired in.
-        let cases: [(&str, Vec<(String, u32)>, &str); 7] = [
+        let cases: [(&str, Vec<(String, u32)>, &str); 8] = [
             ("sys-cjk-han-ja", cjk_han_japanese(), "カテゴリ"),
             ("sys-cjk-han-zh", cjk_han_simplified(), "页面布局 客户端配置"),
             ("sys-cjk-hangul", cjk_hangul(), "한글"),
             ("sys-thai", thai(), "ทดสอบ"),
             ("sys-hebrew", hebrew(), "עברית"),
+            ("sys-bengali", bengali(), "বাংলা ভাষা"),
             ("ui", candidates(UI), "Русский"),
             // Czech interface labels: every Czech accented letter, in both cases.
             ("ui", candidates(UI), "Příliš žluťoučký kůň úpěl ďábelské ódy ŘŠČŽÝÁÍÉÚŮĚŤĎŇÓ"),

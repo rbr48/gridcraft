@@ -157,6 +157,27 @@ impl Dialog {
                 vec![Text { key: "name", label: "Name:" }],
                 json!({"name": app.session.active().and_then(|d| d.wb.active().map(|s| s.name.clone()))}),
             ),
+            "banglaConverter" => Dialog::form(
+                "banglaConverter",
+                "Bangla Converter (Unicode ⇄ ANSI)",
+                "tools.banglaConvert",
+                vec![
+                    Choice {
+                        key: "direction",
+                        label: "Conversion Direction",
+                        options: vec![("unicodeToAnsi", "Unicode to ANSI (SutonnyMJ)"), ("ansiToUnicode", "ANSI (SutonnyMJ) to Unicode")],
+                    },
+                    Choice {
+                        key: "target",
+                        label: "Target",
+                        options: vec![("selection", "Selected cells"), ("sheet", "Current sheet"), ("document", "Entire workbook")],
+                    },
+                ],
+                json!({
+                    "direction": "unicodeToAnsi",
+                    "target": "selection",
+                }),
+            ),
             "moveSheet" => {
                 let sheets: Vec<String> = app.session.active().map(|d| d.wb.sheets.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
                 let mut d = Dialog::form(

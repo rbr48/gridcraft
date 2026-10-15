@@ -256,6 +256,8 @@ pub struct Session {
     /// Review › Notes › Show All Notes: every note is displayed. An application display setting
     /// (like Excel's comment indicator option), so it's not saved in the file.
     pub show_all_notes: bool,
+    /// Active Bangla typing mode (Off, Phonetic, Jatiya, Ansi).
+    pub bangla_mode: cmd::bangla::BanglaMode,
 }
 
 impl Session {

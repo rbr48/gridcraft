@@ -2,6 +2,8 @@
 //! `data.sortAscending`) plus primitive editing commands (`cell.set`, `selection.set`).
 
 pub mod analysis;
+pub mod bangla;
+pub mod bangla_vocab;
 pub mod data;
 pub mod draw;
 pub mod edit;
@@ -144,6 +146,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(forecast::specs());
         v.extend(analysis::specs());
         v.extend(print::specs());
+        v.extend(bangla::specs());
         v
     })
 }

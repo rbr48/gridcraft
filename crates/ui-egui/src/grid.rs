@@ -2601,6 +2601,11 @@ fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Response, geo:
             egui::Event::Paste(text) => app.paste_external(text),
             egui::Event::Text(_) if shortcut_pressed => {}
             egui::Event::Text(text) if text.chars().all(|c| !c.is_control()) && !text.is_empty() => {
+                if app.session.bangla_mode != gridcraft_engine::cmd::bangla::BanglaMode::Off {
+                    app.begin_edit(Some(String::new()), false);
+                    crate::bangla::handle_text_event(app, &text);
+                    return;
+                }
                 app.begin_edit(Some(text), false);
                 if let Some(ed) = app.editor.as_mut() {
                     ed.caret = ed.text.chars().count();

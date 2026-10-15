@@ -1059,6 +1059,35 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
+    sep(ui);
+    // Bangla Input & Conversion
+    let mode_label = app.session.bangla_mode.badge();
+    let btn = big_button(ui, Icon::Spell, mode_label, "Bangla Input Mode (F12)", true);
+    egui::Popup::menu(&btn).show(|ui| {
+        if ui.selectable_label(app.session.bangla_mode == gridcraft_engine::cmd::bangla::BanglaMode::Off, "English (Off)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "off"}));
+        }
+        if ui.selectable_label(app.session.bangla_mode == gridcraft_engine::cmd::bangla::BanglaMode::Phonetic, "বাং Phonetic (Avro)").clicked()
+        {
+            act(app, "tools.banglaMode", json!({"mode": "phonetic"}));
+        }
+        if ui
+            .selectable_label(app.session.bangla_mode == gridcraft_engine::cmd::bangla::BanglaMode::Jatiya, "বাং জাতীয় (National / Ctrl+Alt+V)")
+            .clicked()
+        {
+            act(app, "tools.banglaMode", json!({"mode": "jatiya"}));
+        }
+        if ui
+            .selectable_label(app.session.bangla_mode == gridcraft_engine::cmd::bangla::BanglaMode::Ansi, "বাং ANSI (SutonnyMJ / Ctrl+Alt+B)")
+            .clicked()
+        {
+            act(app, "tools.banglaMode", json!({"mode": "ansi"}));
+        }
+        ui.separator();
+        if ui.button("Bangla Converter…").clicked() {
+            act(app, "tools.banglaConverter", json!({}));
+        }
+    });
 }
 
 fn font_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
