@@ -45,3 +45,11 @@ Generated-in-code art is original and has no file to list: the UI icon set (`cra
 | `assets/fonts/NotoSansBengali-Regular.ttf` | Google Fonts / The Noto Project Authors | https://github.com/googlefonts/noto-fonts | OFL-1.1 (`assets/fonts/OFL-NotoSansBengali.txt`) | Open-source Bengali typeface for web & fallback rendering |
 | `assets/fonts/OFL-NotoSansBengali.txt` | (licence text) | upstream project | — | Licence of the Noto Sans Bengali font |
 
+## Third-party code and data
+
+Source files and data tables taken from other projects are listed here the same way. They are code, not assets, so `cargo xtask assets` does not check them.
+
+| File | Author | Source | Licence | Notes |
+|---|---|---|---|---|
+| `crates/engine/src/cmd/bangla_vocab.rs` | Mehdi Hasan Khan, OmicronLab (Avro Keyboard) | https://github.com/omicronlab/Avro-Keyboard | MPL-1.1 (`LICENSE-MPL-1.1.txt`), file-level: this file alone | Avro's phonetic word database, converted to a Rust table of (romanised, Bangla) pairs and edited by GridCraft contributors. The file header keeps the MPL notice. Word suggestions for Bangla phonetic typing |
+

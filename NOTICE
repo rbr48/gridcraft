@@ -12,5 +12,11 @@ Third-party material
 This product bundles third-party material under its own licenses, listed below. The per-file
 list (author, source, license) is in ATTRIBUTION.md.
 
-None: every bundled asset is original to GridCraft. Builds made with craft-fonts
+- Noto Sans Bengali (`assets/fonts/NotoSansBengali-Regular.ttf`), SIL Open Font License 1.1
+  (`assets/fonts/OFL-NotoSansBengali.txt`). Compiled into the app and the PDF writer for Bengali text.
+- Avro Keyboard's phonetic word database (`crates/engine/src/cmd/bangla_vocab.rs`), Mozilla
+  Public License 1.1 (`LICENSE-MPL-1.1.txt`). That one file is under the MPL 1.1; the rest of
+  GridCraft is under the licenses above.
+
+Every other bundled asset is original to GridCraft. Builds made with craft-fonts
 (CRAFT_FONTS_DIR) embed the fonts listed in ATTRIBUTION.md under the SIL Open Font License 1.1.
