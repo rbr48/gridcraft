@@ -57,6 +57,7 @@ pub fn open_bytes(name: &str, bytes: &[u8]) -> Result<(Workbook, Vec<String>)> {
 pub fn open_bytes_with_password(name: &str, bytes: &[u8], password: Option<&str>) -> Result<(Workbook, Vec<String>)> {
     if gridcraft_xlsx::sniff(bytes) != gridcraft_xlsx::Format::Encrypted {
         let (mut wb, warnings) = open_plain(name, bytes)?;
+        crate::cmd::bangla::normalize_bijoy_workbook(&mut wb);
         fit_imported_rows(&mut wb);
         return Ok((wb, warnings));
     }
@@ -71,6 +72,7 @@ pub fn open_bytes_with_password(name: &str, bytes: &[u8], password: Option<&str>
         return Err(EngineError::Other(format!("We can't open '{name}': the encrypted file is damaged (it holds another encrypted file).")));
     }
     let (mut wb, mut warnings) = open_plain(name, &plain)?;
+    crate::cmd::bangla::normalize_bijoy_workbook(&mut wb);
     fit_imported_rows(&mut wb);
     warnings.insert(0, DECRYPTED_NOTICE.into());
     Ok((wb, warnings))
@@ -738,5 +740,28 @@ mod tests {
             let (opened, _) = open_bytes(name, b"a,b\n1,2\n").unwrap_or_else(|e| panic!("{name}: {e}"));
             assert_eq!(opened.sheet(0).unwrap().value(CellRef::new(0, 1)), gridcraft_core::Value::text("b"), "{name}");
         }
+    }
+
+    #[test]
+    fn open_bytes_normalizes_bijoy_fonts_to_unicode() {
+        use gridcraft_core::Value;
+        use gridcraft_model::{Cell, StyleId};
+        let mut wb = Workbook::new();
+        let st = wb.styles.derive(StyleId::DEFAULT, |s| {
+            s.font.name = "SutonnyMJ".into();
+            s.font.size = 14.0;
+        });
+        wb.sheet_mut(0).unwrap().set_cell(CellRef::new(0, 0), Cell {
+            value: Value::text("evsjv‡`k K...wl e¨vsK"),
+            style: st,
+            ..Default::default()
+        });
+        let bytes = save_bytes(&wb, "bijoy.xlsx").unwrap();
+        let (opened, _) = open_bytes("bijoy.xlsx", &bytes).unwrap();
+        let sh = opened.sheet(0).unwrap();
+        assert_eq!(sh.value(CellRef::new(0, 0)), Value::text("বাংলাদেশ কৃষি ব্যাংক"));
+        let cell_st = opened.styles.get(sh.cells.get(CellRef::new(0, 0)).unwrap().style);
+        assert_eq!(cell_st.font.name, "Kalpurush");
+        assert_eq!(cell_st.font.size, 12.0);
     }
 }

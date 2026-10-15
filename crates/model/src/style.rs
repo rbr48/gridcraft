@@ -413,6 +413,13 @@ impl StyleTable {
     pub fn iter(&self) -> impl Iterator<Item = (StyleId, &Style)> {
         self.styles.iter().enumerate().map(|(i, s)| (StyleId(i as u32), s))
     }
+    /// Updates style `id` in place and rebuilds the lookup index.
+    pub fn update(&mut self, id: StyleId, f: impl FnOnce(&mut Style)) {
+        if let Some(s) = self.styles.get_mut(id.0 as usize) {
+            f(s);
+            self.rebuild_index();
+        }
+    }
     pub fn rebuild_index(&mut self) {
         self.index = self.styles.iter().enumerate().map(|(i, s)| (s.clone(), StyleId(i as u32))).collect();
     }

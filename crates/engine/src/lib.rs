@@ -199,6 +199,8 @@ pub struct Prefs {
     pub user_dictionary: Vec<String>,
     /// View › Show › Formula Bar (an application option in Excel, not saved in the file).
     pub formula_bar: bool,
+    /// Automatically normalize legacy Bijoy / ANSI fonts (SutonnyMJ etc.) to standard Unicode on open.
+    pub convert_bijoy_on_open: bool,
 }
 
 impl Default for Prefs {
@@ -213,6 +215,7 @@ impl Default for Prefs {
             r1c1: false,
             user_dictionary: vec![],
             formula_bar: true,
+            convert_bijoy_on_open: true,
         }
     }
 }

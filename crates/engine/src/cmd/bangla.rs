@@ -2124,6 +2124,244 @@ fn cmd_bangla_converter(s: &mut Session, _p: &Json) -> Result<Json> {
     Ok(json!({"opened": true}))
 }
 
+/// Known legacy Bijoy / ANSI Bengali font names that store glyph-encoded ASCII.
+pub fn is_bijoy_font(font_name: &str) -> bool {
+    let lower = font_name.trim().to_ascii_lowercase();
+    lower.contains("sutonnymj")
+        || lower.contains("sutonny")
+        || lower.contains("siyam rupali ansi")
+        || lower.contains("bijoy")
+        || lower == "classic bangla"
+        || lower.ends_with("mj")
+        || lower.contains("boishakhi")
+        || lower.contains("chandan")
+        || lower.contains("dina")
+        || lower.contains("dhurbo")
+        || lower.contains("falgun")
+        || lower.contains("hashem")
+        || lower.contains("shonar bangla")
+        || lower.contains("mukti")
+        || lower.contains("probhat")
+}
+
+pub fn is_sutonny_glyph(c: char) -> bool {
+    matches!(
+        c,
+        '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | '‚' | '„' | '•' | '›' | 'œ' | 'š' | 'Ÿ' | 'ƒ'
+    ) || ('\u{00A1}'..='\u{00FF}').contains(&c)
+}
+
+/// Detects whether text contains characteristic Bijoy ANSI glyphs or clusters.
+pub fn has_bijoy_markers(text: &str) -> bool {
+    if text.chars().any(|c| ('\u{0980}'..='\u{09FF}').contains(&c)) {
+        return false;
+    }
+    if text.chars().any(is_sutonny_glyph) {
+        return true;
+    }
+    let lower = text.to_lowercase();
+    lower.contains("evsjv") || lower.contains("e¨vsk") || lower.contains("m~px") || lower.contains("bw_")
+}
+
+fn convert_formula_bijoy_literals(formula: &str) -> String {
+    if !formula.contains('"') || !has_bijoy_markers(formula) {
+        return formula.to_string();
+    }
+    let mut out = String::with_capacity(formula.len());
+    let mut in_str = false;
+    let mut current_lit = String::new();
+    for ch in formula.chars() {
+        if ch == '"' {
+            if in_str {
+                if has_bijoy_markers(&current_lit) {
+                    out.push_str(&ansi_to_unicode(&current_lit));
+                } else {
+                    out.push_str(&current_lit);
+                }
+                current_lit.clear();
+                out.push('"');
+                in_str = false;
+            } else {
+                in_str = true;
+                out.push('"');
+            }
+        } else if in_str {
+            current_lit.push(ch);
+        } else {
+            out.push(ch);
+        }
+    }
+    if !current_lit.is_empty() {
+        out.push_str(&current_lit);
+    }
+    out
+}
+
+/// Automatically detects legacy Bijoy/ANSI fonts and text in the workbook,
+/// transparently converts raw ASCII glyph keystrokes to standard Bengali Unicode,
+/// and re-assigns clean OpenType Unicode font ("Kalpurush") while strictly preserving
+/// styles, colors, alignments, and borders.
+pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
+    use std::collections::{HashMap, HashSet};
+
+    // 1. Identify all styles that explicitly use a Bijoy font.
+    let mut bijoy_style_ids = HashSet::new();
+    for (id, style) in wb.styles.iter() {
+        if is_bijoy_font(&style.font.name) {
+            bijoy_style_ids.insert(id);
+        }
+    }
+
+    let has_bijoy_theme = is_bijoy_font(&wb.theme.major_font) || is_bijoy_font(&wb.theme.minor_font);
+    let mut has_bijoy_content = false;
+
+    if bijoy_style_ids.is_empty() && !has_bijoy_theme {
+        'check: for sheet in &wb.sheets {
+            if has_bijoy_markers(&sheet.name) {
+                has_bijoy_content = true;
+                break;
+            }
+            for (_, cell) in sheet.cells.iter() {
+                if let Value::Text(ref text) = cell.value {
+                    if has_bijoy_markers(text) {
+                        has_bijoy_content = true;
+                        break 'check;
+                    }
+                }
+            }
+            for shape in &sheet.shapes {
+                if shape.format.font.as_deref().is_some_and(is_bijoy_font) || has_bijoy_markers(&shape.text) {
+                    has_bijoy_content = true;
+                    break 'check;
+                }
+            }
+        }
+        if !has_bijoy_content {
+            return;
+        }
+    }
+
+    // 2. Update all Bijoy styles in the StyleTable in place to Kalpurush and -2pt size
+    for &id in &bijoy_style_ids {
+        wb.styles.update(id, |st| {
+            st.font.name = "Kalpurush".into();
+            st.font.size = (st.font.size - 2.0).max(6.0);
+        });
+    }
+
+    for (_name, style) in &mut wb.cell_styles {
+        if is_bijoy_font(&style.font.name) {
+            style.font.name = "Kalpurush".into();
+            style.font.size = (style.font.size - 2.0).max(6.0);
+        }
+    }
+
+    if is_bijoy_font(&wb.theme.major_font) {
+        wb.theme.major_font = "Kalpurush".into();
+    }
+    if is_bijoy_font(&wb.theme.minor_font) {
+        wb.theme.minor_font = "Kalpurush".into();
+    }
+
+    // 3. Convert cells, comments, shapes, sheet names, tables across all sheets
+    let mut derived_cache: HashMap<gridcraft_model::StyleId, gridcraft_model::StyleId> = HashMap::new();
+
+    for sheet_idx in 0..wb.sheets.len() {
+        let candidates: Vec<(CellRef, String, gridcraft_model::StyleId, bool)> = {
+            let Some(sheet) = wb.sheet(sheet_idx) else { continue };
+            sheet
+                .cells
+                .iter()
+                .filter_map(|(c, cell)| {
+                    if let Value::Text(ref text) = cell.value {
+                        if text.is_empty() {
+                            return None;
+                        }
+                        let is_bijoy_style = bijoy_style_ids.contains(&cell.style);
+                        let is_bijoy_text = has_bijoy_markers(text);
+                        if is_bijoy_style || is_bijoy_text {
+                            Some((c, text.to_string(), cell.style, is_bijoy_style))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        for &(_, _, style_id, is_bijoy_style) in &candidates {
+            if !is_bijoy_style && !derived_cache.contains_key(&style_id) {
+                let target = wb.styles.derive(style_id, |st| {
+                    st.font.name = "Kalpurush".into();
+                    st.font.size = (st.font.size - 2.0).max(6.0);
+                });
+                derived_cache.insert(style_id, target);
+            }
+        }
+
+        let Some(sheet) = wb.sheet_mut(sheet_idx) else { continue };
+
+        if has_bijoy_markers(&sheet.name) {
+            sheet.name = ansi_to_unicode(&sheet.name);
+        }
+
+        for (c, text, style_id, is_bijoy_style) in candidates {
+            let converted = ansi_to_unicode(&text);
+            if let Some(cell) = sheet.cells.get_mut(c) {
+                cell.value = Value::text(converted);
+                if !is_bijoy_style {
+                    if let Some(&target_style) = derived_cache.get(&style_id) {
+                        cell.style = target_style;
+                    }
+                }
+                if let Some(formula) = &cell.formula {
+                    let updated = convert_formula_bijoy_literals(&formula.text);
+                    if updated != formula.text {
+                        cell.formula = Some(std::sync::Arc::new(gridcraft_model::Formula::new(&updated)));
+                    }
+                }
+            }
+        }
+
+        for comment in sheet.comments.values_mut() {
+            if has_bijoy_markers(&comment.text) || !bijoy_style_ids.is_empty() {
+                comment.text = ansi_to_unicode(&comment.text);
+            }
+            for reply in &mut comment.replies {
+                if has_bijoy_markers(&reply.1) {
+                    reply.1 = ansi_to_unicode(&reply.1);
+                }
+            }
+        }
+
+        for shape in &mut sheet.shapes {
+            let is_bijoy_shape = shape.format.font.as_deref().is_some_and(is_bijoy_font);
+            if is_bijoy_shape || has_bijoy_markers(&shape.text) {
+                shape.text = ansi_to_unicode(&shape.text);
+                shape.format.font = Some("Kalpurush".into());
+                if let Some(sz) = shape.format.font_size.as_mut() {
+                    *sz = (*sz - 2.0).max(6.0);
+                }
+            }
+        }
+
+        for table in &mut sheet.tables {
+            for col in &mut table.columns {
+                if has_bijoy_markers(&col.name) {
+                    col.name = ansi_to_unicode(&col.name);
+                }
+                if let Some(lbl) = col.totals_label.as_mut() {
+                    if has_bijoy_markers(lbl) {
+                        *lbl = ansi_to_unicode(lbl);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
@@ -2554,5 +2792,109 @@ mod tests {
         let conj_out = unicode_to_ansi_tagged(&conj_in);
         let conj_text: String = conj_out.iter().map(|(c, _)| *c).collect();
         assert_eq!(conj_text, "³", "Unicode 'ক্ত' must form the ANSI conjunct '³'");
+    }
+
+    #[test]
+    fn test_normalize_bijoy_workbook() {
+        use gridcraft_core::CellRef;
+        use gridcraft_model::{Cell, Formula, Shape, ShapeFormat, Style, Workbook};
+
+        let mut wb = Workbook::new();
+
+        // 1. Setup a SutonnyMJ style (14pt)
+        let sutonny_style = wb.styles.intern(Style {
+            font: gridcraft_model::Font {
+                name: "SutonnyMJ".into(),
+                size: 14.0,
+                bold: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        // 2. Put Bijoy cells in the sheet
+        let sh = wb.sheet_mut(0).unwrap();
+        sh.cells.set(CellRef::parse("A1").unwrap(), Cell {
+            value: Value::text("evsjv‡`k K...wl e¨vsK"),
+            formula: None,
+            style: sutonny_style,
+        });
+        sh.cells.set(CellRef::parse("A2").unwrap(), Cell {
+            value: Value::text("Avkvkywb kvLv, mvZÿxiv"),
+            formula: None,
+            style: sutonny_style,
+        });
+        sh.cells.set(CellRef::parse("A3").unwrap(), Cell {
+            value: Value::text("FY bw_ m~Px"),
+            formula: None,
+            style: sutonny_style,
+        });
+        sh.cells.set(CellRef::parse("B1").unwrap(), Cell {
+            value: Value::text("test"),
+            formula: Some(std::sync::Arc::new(Formula::new("=\"evsjv‡`k\""))),
+            style: sutonny_style,
+        });
+
+        // Shape with Bijoy text
+        sh.shapes.push(Shape {
+            id: 1,
+            kind: gridcraft_model::ShapeKind::Rectangle,
+            anchor: Default::default(),
+            fill: Default::default(),
+            line: Default::default(),
+            text: "K…wl FY".into(),
+            format: ShapeFormat {
+                font: Some("SutonnyMJ".into()),
+                font_size: Some(16.0),
+                ..Default::default()
+            },
+        });
+
+        // 3. Normalize workbook
+        normalize_bijoy_workbook(&mut wb);
+
+        // 4. Verify converted values and normalized fonts
+        let sh_out = wb.sheet(0).unwrap();
+        let a1 = sh_out.cells.get(CellRef::parse("A1").unwrap()).unwrap();
+        assert_eq!(a1.value, Value::text("বাংলাদেশ কৃষি ব্যাংক"));
+        let st1 = wb.styles.get(a1.style);
+        assert_eq!(st1.font.name, "Kalpurush");
+        assert_eq!(st1.font.size, 12.0); // 14pt SutonnyMJ -> 12pt Kalpurush
+        assert!(st1.font.bold);
+
+        let a2 = sh_out.cells.get(CellRef::parse("A2").unwrap()).unwrap();
+        assert_eq!(a2.value, Value::text("আশাশুনি শাখা, সাতক্ষীরা"));
+
+        let a3 = sh_out.cells.get(CellRef::parse("A3").unwrap()).unwrap();
+        assert_eq!(a3.value, Value::text("ঋণ নথি সূচী"));
+
+        let b1 = sh_out.cells.get(CellRef::parse("B1").unwrap()).unwrap();
+        assert_eq!(b1.formula.as_ref().unwrap().text, "\"বাংলাদেশ\"");
+
+        assert_eq!(sh_out.shapes[0].text, "কৃষি ঋণ");
+        assert_eq!(sh_out.shapes[0].format.font.as_deref(), Some("Kalpurush"));
+        assert_eq!(sh_out.shapes[0].format.font_size, Some(14.0));
+    }
+
+    #[test]
+    fn test_normalize_bijoy_workbook_without_explicit_font() {
+        use gridcraft_core::CellRef;
+        use gridcraft_model::{Cell, Workbook};
+
+        let mut wb = Workbook::new();
+        let sh = wb.sheet_mut(0).unwrap();
+        sh.cells.set(CellRef::parse("A1").unwrap(), Cell {
+            value: Value::text("evsjv‡`k K...wl e¨vsK"),
+            formula: None,
+            style: gridcraft_model::StyleId::DEFAULT,
+        });
+
+        normalize_bijoy_workbook(&mut wb);
+
+        let sh_out = wb.sheet(0).unwrap();
+        let a1 = sh_out.cells.get(CellRef::parse("A1").unwrap()).unwrap();
+        assert_eq!(a1.value, Value::text("বাংলাদেশ কৃষি ব্যাংক"));
+        let st = wb.styles.get(a1.style);
+        assert_eq!(st.font.name, "Kalpurush");
     }
 }
