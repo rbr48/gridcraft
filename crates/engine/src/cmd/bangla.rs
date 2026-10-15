@@ -2148,7 +2148,7 @@ pub fn is_sutonny_glyph(c: char) -> bool {
     matches!(
         c,
         '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | '‚' | '„' | '•' | '›' | 'œ' | 'š' | 'Ÿ' | 'ƒ'
-    ) || ('\u{00A1}'..='\u{00FF}').contains(&c)
+    )
 }
 
 /// Detects whether text contains characteristic Bijoy ANSI glyphs or clusters.
@@ -2156,11 +2156,30 @@ pub fn has_bijoy_markers(text: &str) -> bool {
     if text.chars().any(|c| ('\u{0980}'..='\u{09FF}').contains(&c)) {
         return false;
     }
-    if text.chars().any(is_sutonny_glyph) {
+    if text.contains('†') || text.contains('‡') {
+        return true;
+    }
+    if text.contains("šÍ")
+        || text.contains("¯Í")
+        || text.contains("¤ú")
+        || text.contains("cÖ")
+        || text.contains("K…")
+        || text.contains("e¨")
+        || text.contains("wewfbœ")
+        || text.contains("e¨e¯’v")
+    {
         return true;
     }
     let lower = text.to_lowercase();
-    lower.contains("evsjv") || lower.contains("e¨vsk") || lower.contains("m~px") || lower.contains("bw_")
+    lower.contains("evsjv")
+        || lower.contains("e¨vsk")
+        || lower.contains("m~px")
+        || lower.contains("bw_")
+        || lower.contains("kvlv")
+        || lower.contains("zvwiL")
+        || lower.contains("uvkv")
+        || lower.contains("wnmve")
+        || lower.contains("mshk")
 }
 
 fn convert_formula_bijoy_literals(formula: &str) -> String {

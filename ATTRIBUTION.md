@@ -42,3 +42,6 @@ Generated-in-code art is original and has no file to list: the UI icon set (`cra
 | `docs/images/pivot.png` | GridCraft contributors | screenshot of GridCraft rendered offscreen (`crates/ui-egui/examples/snapshot.rs`) showing an original sample workbook | MIT OR Apache-2.0 | README screenshot; no third-party content |
 | `docs/images/format-chart.png` | GridCraft contributors | screenshot of GridCraft rendered offscreen (`crates/ui-egui/examples/snapshot.rs`) showing an original sample workbook | MIT OR Apache-2.0 | README screenshot; no third-party content |
 | `docs/images/page-break.png` | GridCraft contributors | screenshot of GridCraft rendered offscreen (`crates/ui-egui/examples/snapshot.rs`) showing an original sample workbook | MIT OR Apache-2.0 | README screenshot; no third-party content |
+| `assets/fonts/NotoSansBengali-Regular.ttf` | Google Fonts / The Noto Project Authors | https://github.com/googlefonts/noto-fonts | OFL-1.1 (`assets/fonts/OFL-NotoSansBengali.txt`) | Open-source Bengali typeface for web & fallback rendering |
+| `assets/fonts/OFL-NotoSansBengali.txt` | (licence text) | upstream project | — | Licence of the Noto Sans Bengali font |
+

@@ -354,6 +354,10 @@ fn candidates(role: &str) -> Vec<(String, u32)> {
     v
 }
 
+/// Embedded OFL-1.1 Bengali fallback font (Noto Sans Bengali) ensuring Bengali text
+/// renders cleanly on WebAssembly / mobile where host OS fonts cannot be probed.
+const BENGALI_FONT_BYTES: &[u8] = include_bytes!("../../../assets/fonts/NotoSansBengali-Regular.ttf");
+
 /// Builds the font set from system fonts (with egui's defaults as fallback), with the default
 /// (non-Japanese) Han order. Never reads the host locale, so tests and snapshots are stable.
 pub fn font_definitions() -> FontDefinitions {
@@ -412,9 +416,22 @@ pub fn font_definitions_with(language: crate::i18n::Language, used: &[String]) -
         fonts.families.insert(FontFamily::Name(role.into()), chain);
         bound.push(role.to_string());
     }
+
     // Installed workbook fonts, so a cell's chosen font actually renders in it.
     for family in crate::fonts::installed_among(used) {
         bound.extend(crate::fonts::bind_family(&mut fonts, &family));
+    }
+    // Bind Kalpurush and Bengali font families so any cell explicitly styled with them renders with Bengali glyphs.
+    let bengali_data_key = "sys-bengali-bundled";
+    fonts.font_data.entry(bengali_data_key.into()).or_insert_with(|| Arc::new(FontData::from_static(BENGALI_FONT_BYTES)));
+    for (bold, italic) in [(false, false), (true, false), (false, true), (true, true)] {
+        for name in ["Kalpurush", "kalpurush", "Noto Sans Bengali", "SutonnyMJ"] {
+            let role = crate::fonts::role_key(name, bold, italic);
+            let mut chain = vec![bengali_data_key.to_string()];
+            chain.extend(base_prop.clone());
+            fonts.families.insert(FontFamily::Name(role.clone().into()), chain);
+            bound.push(role);
+        }
     }
     // Interface text (formula bar, name box, dialogs) falls back to the cell font before the
     // script faces: whatever a cell can draw, the formula bar can draw too, even where no script
@@ -454,24 +471,33 @@ fn load_fallback(fonts: &mut FontDefinitions, han: HanOrder) -> Vec<String> {
     // Hebrew), so loading it again for a later script would only duplicate tens of MB in memory.
     let mut loaded: Vec<String> = Vec::new();
     for (key, cands) in fallback_faces(han) {
+        let mut key_loaded = false;
         for (path, index) in &cands {
             if loaded.contains(path) {
+                key_loaded = true;
                 break; // a face loaded for an earlier script already covers this one
             }
             if let Some(fd) = try_load(&[(path.as_str(), *index)]) {
                 fonts.font_data.insert(key.to_string(), Arc::new(fd));
                 keys.push(key.to_string());
                 loaded.push(path.clone());
+                key_loaded = true;
                 break;
             }
+        }
+        if !key_loaded && key == "sys-bengali" {
+            fonts.font_data.entry(key.to_string()).or_insert_with(|| Arc::new(FontData::from_static(BENGALI_FONT_BYTES)));
+            keys.push(key.to_string());
         }
     }
     keys
 }
 
 #[cfg(target_arch = "wasm32")]
-fn load_fallback(_fonts: &mut FontDefinitions, _han: HanOrder) -> Vec<String> {
-    Vec::new()
+fn load_fallback(fonts: &mut FontDefinitions, _han: HanOrder) -> Vec<String> {
+    let key = "sys-bengali";
+    fonts.font_data.entry(key.to_string()).or_insert_with(|| Arc::new(FontData::from_static(BENGALI_FONT_BYTES)));
+    vec![key.to_string()]
 }
 
 /// Every fallback face we look for, in chain order: `(key, candidate files)`. One file per script
