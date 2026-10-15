@@ -578,12 +578,14 @@ mod tests {
 
     #[test]
     fn bangla_ui_state_reset() {
-        let mut st = BanglaUiState::default();
-        st.phonetic_buffer = "ami".into();
-        st.phonetic_candidates = vec!["আমি".into()];
-        st.phonetic_rendered_len = 3;
-        st.jatiya_linker = true;
-        st.ansi_linker = true;
+        let mut st = BanglaUiState {
+            phonetic_buffer: "ami".into(),
+            phonetic_candidates: vec!["আমি".into()],
+            phonetic_rendered_len: 3,
+            jatiya_linker: true,
+            ansi_linker: true,
+            ..Default::default()
+        };
         st.reset();
         assert!(st.phonetic_buffer.is_empty());
         assert!(st.phonetic_candidates.is_empty());

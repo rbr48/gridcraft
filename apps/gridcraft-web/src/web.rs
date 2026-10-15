@@ -19,6 +19,10 @@ pub fn start() {
             log::error!("missing <canvas id=\"{CANVAS_ID}\">");
             return;
         };
+        let dirty = std::rc::Rc::new(std::cell::Cell::new(false));
+        if let Err(e) = guard_unload(dirty.clone()) {
+            log::error!("no unsaved-changes guard: {e}");
+        }
         let mut options = eframe::WebOptions::default();
         if query().contains("webgl")
             && let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup
@@ -29,15 +33,25 @@ pub fn start() {
         // workbooks in it and stores what it saves (`host`).
         let bridge = if query_param("host").as_deref() == Some("parent") { crate::host::Bridge::new() } else { None };
         let app_bridge = bridge.clone();
+
+        // Restore previously opened workbook from IndexedDB on refresh, if available
+        let restored_workbook = if app_bridge.is_none() && !query().contains("sample") { crate::doc_store::load_last().await } else { None };
+        let shell_dirty = dirty.clone();
+
         let result = eframe::WebRunner::new()
             .start(
                 canvas,
                 options,
                 Box::new(move |cc| {
                     let inbox: Inbox = Inbox::default();
+                    let has_restored = restored_workbook.is_some();
+                    if let Some((name, bytes)) = restored_workbook {
+                        log::info!("restoring previously opened workbook: {name} ({} bytes)", bytes.len());
+                        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
+                    }
                     let mut session = Session::new();
                     // In host mode the parent sends the workbook to edit; no sample meanwhile.
-                    let q = if app_bridge.is_some() { String::new() } else { query() };
+                    let q = if app_bridge.is_some() || has_restored { String::new() } else { query() };
                     if let Some(name) = q.split(['?', '&']).find_map(|kv| kv.strip_prefix("sample=")) {
                         let _ = session.execute("file.new", serde_json::json!({"sample": name}));
                     } else if q.contains("sample") {
@@ -65,7 +79,7 @@ pub fn start() {
                         }
                         bridge.post_ready();
                     }
-                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge }))
+                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, dirty: shell_dirty, last_autosave: 0.0 }))
                 }),
             )
             .await;
@@ -93,6 +107,8 @@ struct WebShell {
     app: SheetApp,
     inbox: Inbox,
     bridge: Option<crate::host::Bridge>,
+    dirty: std::rc::Rc<std::cell::Cell<bool>>,
+    last_autosave: f64,
 }
 
 impl eframe::App for WebShell {
@@ -105,6 +121,7 @@ impl eframe::App for WebShell {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped.xlsx".into());
                 match f.bytes_async().await {
                     Ok(bytes) => {
+                        crate::doc_store::store(&name, &bytes);
                         inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                         ctx.request_repaint();
                     }
@@ -124,7 +141,35 @@ impl eframe::App for WebShell {
         if let Some(bridge) = &self.bridge {
             bridge.sync(&mut self.app);
         }
+        let is_dirty = self.app.session.active().is_some_and(|d| d.is_dirty());
+        self.dirty.set(is_dirty);
+
+        let now = js_sys::Date::now();
+        if is_dirty && (now - self.last_autosave > 2500.0) {
+            if let Some(doc) = self.app.session.active() {
+                let name = doc.display_title();
+                if let Ok(bytes) = gridcraft_engine::io::save_bytes(&doc.wb, &name) {
+                    crate::doc_store::store(&name, &bytes);
+                    self.last_autosave = now;
+                }
+            }
+        }
     }
+}
+
+/// Closing, reloading or leaving the tab with unsaved changes asks first. Browsers show their own
+/// confirmation: Cancel, then File › Save.
+fn guard_unload(dirty: std::rc::Rc<std::cell::Cell<bool>>) -> Result<(), String> {
+    let window = web_sys::window().ok_or("no window")?;
+    let on_unload = wasm_bindgen::closure::Closure::<dyn FnMut(web_sys::BeforeUnloadEvent)>::new(move |e: web_sys::BeforeUnloadEvent| {
+        if dirty.get() {
+            e.prevent_default();
+            e.set_return_value("unsaved changes");
+        }
+    });
+    window.add_event_listener_with_callback("beforeunload", on_unload.as_ref().unchecked_ref()).map_err(|e| format!("{e:?}"))?;
+    on_unload.forget();
+    Ok(())
 }
 
 fn services(inbox: Inbox, ctx: egui::Context) -> Services {
@@ -144,7 +189,9 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
                     return;
                 };
                 let bytes = file.read().await;
-                inbox.lock().unwrap_or_else(|e| e.into_inner()).push((file.file_name(), bytes));
+                let name = file.file_name();
+                crate::doc_store::store(&name, &bytes);
+                inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                 ctx.request_repaint();
             });
         })),
@@ -160,6 +207,7 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
             });
         })),
         download: Some(Box::new(|name: &str, bytes: &[u8]| {
+            crate::doc_store::store(name, bytes);
             if let Err(e) = download(name, bytes) {
                 log::error!("download of {name} failed: {e}");
             }

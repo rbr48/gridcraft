@@ -9,3 +9,5 @@ description = "GridCraft's tiny self-contained PDF 1.7 writer (standard 14 fonts
 workspace = true
 
 [dependencies]
+skrifa = { workspace = true }
+harfrust = { workspace = true }

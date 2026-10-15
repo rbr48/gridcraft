@@ -2144,4 +2144,18 @@ mod tests {
         assert_eq!(up + down, blocks.len(), "a header line printed flat: {blocks:?}");
         assert!((1..=3).contains(&up) && (1..=3).contains(&down), "up {up}, down {down}: {blocks:?}");
     }
+
+    #[test]
+    fn bengali_text_prints_as_vectors_without_question_marks() {
+        let mut s = s();
+        let bangla = "বাংলাদেশ কৃষি ব্যাংক";
+        s.execute("range.setValues", json!({"range": "A1", "values": [[bangla]]})).unwrap();
+        let (pdf_bytes, _) = pdf_of(&mut s, json!({}));
+        let pdf = String::from_utf8_lossy(&pdf_bytes);
+        // Ensure no question marks in text blocks
+        assert!(!pdf.contains("(?)"), "Bengali text converted to question mark");
+        assert!(!pdf.contains("(??"), "Bengali text converted to question marks");
+        // Ensure vector paths were drawn for the glyphs
+        assert!(pdf.contains(" m ") && pdf.contains(" c ") && pdf.contains("f\n"), "Vector glyph paths should be emitted");
+    }
 }

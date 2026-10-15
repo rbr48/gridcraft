@@ -2145,10 +2145,7 @@ pub fn is_bijoy_font(font_name: &str) -> bool {
 }
 
 pub fn is_sutonny_glyph(c: char) -> bool {
-    matches!(
-        c,
-        '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | '‚' | '„' | '•' | '›' | 'œ' | 'š' | 'Ÿ' | 'ƒ'
-    )
+    matches!(c, '†' | '‡' | 'ˆ' | '‰' | 'Š' | '‹' | 'Œ' | '‚' | '„' | '•' | '›' | 'œ' | 'š' | 'Ÿ' | 'ƒ')
 }
 
 /// Detects whether text contains characteristic Bijoy ANSI glyphs or clusters.
@@ -2241,11 +2238,11 @@ pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
                 break;
             }
             for (_, cell) in sheet.cells.iter() {
-                if let Value::Text(ref text) = cell.value {
-                    if has_bijoy_markers(text) {
-                        has_bijoy_content = true;
-                        break 'check;
-                    }
+                if let Value::Text(ref text) = cell.value
+                    && has_bijoy_markers(text)
+                {
+                    has_bijoy_content = true;
+                    break 'check;
                 }
             }
             for shape in &sheet.shapes {
@@ -2298,11 +2295,7 @@ pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
                         }
                         let is_bijoy_style = bijoy_style_ids.contains(&cell.style);
                         let is_bijoy_text = has_bijoy_markers(text);
-                        if is_bijoy_style || is_bijoy_text {
-                            Some((c, text.to_string(), cell.style, is_bijoy_style))
-                        } else {
-                            None
-                        }
+                        if is_bijoy_style || is_bijoy_text { Some((c, text.to_string(), cell.style, is_bijoy_style)) } else { None }
                     } else {
                         None
                     }
@@ -2330,10 +2323,8 @@ pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
             let converted = ansi_to_unicode(&text);
             if let Some(cell) = sheet.cells.get_mut(c) {
                 cell.value = Value::text(converted);
-                if !is_bijoy_style {
-                    if let Some(&target_style) = derived_cache.get(&style_id) {
-                        cell.style = target_style;
-                    }
+                if !is_bijoy_style && let Some(&target_style) = derived_cache.get(&style_id) {
+                    cell.style = target_style;
                 }
                 if let Some(formula) = &cell.formula {
                     let updated = convert_formula_bijoy_literals(&formula.text);
@@ -2371,10 +2362,10 @@ pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
                 if has_bijoy_markers(&col.name) {
                     col.name = ansi_to_unicode(&col.name);
                 }
-                if let Some(lbl) = col.totals_label.as_mut() {
-                    if has_bijoy_markers(lbl) {
-                        *lbl = ansi_to_unicode(lbl);
-                    }
+                if let Some(lbl) = col.totals_label.as_mut()
+                    && has_bijoy_markers(lbl)
+                {
+                    *lbl = ansi_to_unicode(lbl);
                 }
             }
         }
@@ -2822,37 +2813,19 @@ mod tests {
 
         // 1. Setup a SutonnyMJ style (14pt)
         let sutonny_style = wb.styles.intern(Style {
-            font: gridcraft_model::Font {
-                name: "SutonnyMJ".into(),
-                size: 14.0,
-                bold: true,
-                ..Default::default()
-            },
+            font: gridcraft_model::Font { name: "SutonnyMJ".into(), size: 14.0, bold: true, ..Default::default() },
             ..Default::default()
         });
 
         // 2. Put Bijoy cells in the sheet
         let sh = wb.sheet_mut(0).unwrap();
-        sh.cells.set(CellRef::parse("A1").unwrap(), Cell {
-            value: Value::text("evsjv‡`k K...wl e¨vsK"),
-            formula: None,
-            style: sutonny_style,
-        });
-        sh.cells.set(CellRef::parse("A2").unwrap(), Cell {
-            value: Value::text("Avkvkywb kvLv, mvZÿxiv"),
-            formula: None,
-            style: sutonny_style,
-        });
-        sh.cells.set(CellRef::parse("A3").unwrap(), Cell {
-            value: Value::text("FY bw_ m~Px"),
-            formula: None,
-            style: sutonny_style,
-        });
-        sh.cells.set(CellRef::parse("B1").unwrap(), Cell {
-            value: Value::text("test"),
-            formula: Some(std::sync::Arc::new(Formula::new("=\"evsjv‡`k\""))),
-            style: sutonny_style,
-        });
+        sh.cells.set(CellRef::parse("A1").unwrap(), Cell { value: Value::text("evsjv‡`k K...wl e¨vsK"), formula: None, style: sutonny_style });
+        sh.cells.set(CellRef::parse("A2").unwrap(), Cell { value: Value::text("Avkvkywb kvLv, mvZÿxiv"), formula: None, style: sutonny_style });
+        sh.cells.set(CellRef::parse("A3").unwrap(), Cell { value: Value::text("FY bw_ m~Px"), formula: None, style: sutonny_style });
+        sh.cells.set(
+            CellRef::parse("B1").unwrap(),
+            Cell { value: Value::text("test"), formula: Some(std::sync::Arc::new(Formula::new("=\"evsjv‡`k\""))), style: sutonny_style },
+        );
 
         // Shape with Bijoy text
         sh.shapes.push(Shape {
@@ -2862,11 +2835,7 @@ mod tests {
             fill: Default::default(),
             line: Default::default(),
             text: "K…wl FY".into(),
-            format: ShapeFormat {
-                font: Some("SutonnyMJ".into()),
-                font_size: Some(16.0),
-                ..Default::default()
-            },
+            format: ShapeFormat { font: Some("SutonnyMJ".into()), font_size: Some(16.0), ..Default::default() },
         });
 
         // 3. Normalize workbook
@@ -2902,11 +2871,10 @@ mod tests {
 
         let mut wb = Workbook::new();
         let sh = wb.sheet_mut(0).unwrap();
-        sh.cells.set(CellRef::parse("A1").unwrap(), Cell {
-            value: Value::text("evsjv‡`k K...wl e¨vsK"),
-            formula: None,
-            style: gridcraft_model::StyleId::DEFAULT,
-        });
+        sh.cells.set(
+            CellRef::parse("A1").unwrap(),
+            Cell { value: Value::text("evsjv‡`k K...wl e¨vsK"), formula: None, style: gridcraft_model::StyleId::DEFAULT },
+        );
 
         normalize_bijoy_workbook(&mut wb);
 

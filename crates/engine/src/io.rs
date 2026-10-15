@@ -751,11 +751,7 @@ mod tests {
             s.font.name = "SutonnyMJ".into();
             s.font.size = 14.0;
         });
-        wb.sheet_mut(0).unwrap().set_cell(CellRef::new(0, 0), Cell {
-            value: Value::text("evsjv‡`k K...wl e¨vsK"),
-            style: st,
-            ..Default::default()
-        });
+        wb.sheet_mut(0).unwrap().set_cell(CellRef::new(0, 0), Cell { value: Value::text("evsjv‡`k K...wl e¨vsK"), style: st, ..Default::default() });
         let bytes = save_bytes(&wb, "bijoy.xlsx").unwrap();
         let (opened, _) = open_bytes("bijoy.xlsx", &bytes).unwrap();
         let sh = opened.sheet(0).unwrap();

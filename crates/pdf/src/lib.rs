@@ -11,6 +11,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+pub mod bengali;
 mod metrics;
 
 use std::fmt::Write as _;
@@ -145,6 +146,9 @@ impl Font {
 
 /// Width of `text` in points when set in `font` at `size` points.
 pub fn text_width(font: Font, size: f32, text: &str) -> f32 {
+    if bengali::has_bengali(text) {
+        return bengali::bengali_text_width(text, size);
+    }
     // u64: a u32 sum overflows for ~8 million characters.
     let units: u64 = text.chars().map(|c| u64::from(font.char_width(c))).sum();
     units as f32 * size / 1000.0
@@ -457,6 +461,12 @@ impl Page {
     /// system) about its baseline origin.
     pub fn text_rotated(&mut self, x: f32, y: f32, size: f32, font: Font, color: Rgb, text: &str, angle: f32) {
         if text.is_empty() || !extent(size) || !finite(&[x, y]) {
+            return;
+        }
+        if bengali::has_bengali(text)
+            && let Some(s) = bengali::render_bengali_vector(x, y, self.height, size, color, text, angle)
+        {
+            self.op(&s);
             return;
         }
         let fi = font.index();
