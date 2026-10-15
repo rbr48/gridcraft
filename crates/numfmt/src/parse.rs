@@ -113,6 +113,8 @@ pub(crate) struct Section {
     pub cond: Option<Cond>,
     pub kind: SecKind,
     pub thousands: bool,
+    pub lakh_grouping: bool,
+    pub bengali_digits: bool,
     /// Number of scaling commas (each divides by 1000).
     pub scale: i32,
     pub percent: i32,
@@ -203,7 +205,7 @@ fn push_lit(toks: &mut Vec<Tok>, s: &str) {
 }
 
 fn is_currency_char(c: char) -> bool {
-    matches!(c, '$' | '€' | '£' | '¥' | '₹' | '₩' | '₽' | '¢' | '₪' | '₫' | '฿')
+    matches!(c, '$' | '€' | '£' | '¥' | '₹' | '৳' | '₩' | '₽' | '¢' | '₪' | '₫' | '฿')
 }
 
 fn parse_color(lc: &str) -> Option<FormatColor> {
@@ -251,11 +253,14 @@ struct Raw {
     color: Option<FormatColor>,
     cond: Option<Cond>,
     currency: bool,
+    lakh_grouping: bool,
+    bengali_digits: bool,
 }
 
 fn tokenize(src: &str) -> Raw {
     let cs: Vec<char> = src.chars().collect();
-    let mut raw = Raw { toks: Vec::new(), color: None, cond: None, currency: false };
+    let has_lakh = src.contains(",##,##") || src.contains(",00,00") || src.contains(",??,??");
+    let mut raw = Raw { toks: Vec::new(), color: None, cond: None, currency: false, lakh_grouping: has_lakh, bengali_digits: false };
     let toks = &mut raw.toks;
     // With no `]` at or after a `[`, that `[` is a literal; checking this once keeps the scan linear.
     let last_close = cs.iter().rposition(|&c| c == ']');
@@ -306,7 +311,7 @@ fn tokenize(src: &str) -> Raw {
                 let close = if last_close.is_some_and(|l| l > i) { cs.get(i + 1..).and_then(|r| r.iter().position(|&d| d == ']')) } else { None };
                 if let Some(p) = close {
                     let content: String = cs.get(i + 1..i + 1 + p).unwrap_or(&[]).iter().collect();
-                    bracket(&mut raw_parts(toks, &mut raw.color, &mut raw.cond, &mut raw.currency), &content);
+                    bracket(&mut raw_parts(toks, &mut raw.color, &mut raw.cond, &mut raw.currency, &mut raw.lakh_grouping, &mut raw.bengali_digits), &content);
                     i += p + 2;
                 } else {
                     push_lit(toks, "[");
@@ -391,10 +396,19 @@ struct RawParts<'a> {
     color: &'a mut Option<FormatColor>,
     cond: &'a mut Option<Cond>,
     currency: &'a mut bool,
+    lakh_grouping: &'a mut bool,
+    bengali_digits: &'a mut bool,
 }
 
-fn raw_parts<'a>(toks: &'a mut Vec<Tok>, color: &'a mut Option<FormatColor>, cond: &'a mut Option<Cond>, currency: &'a mut bool) -> RawParts<'a> {
-    RawParts { toks, color, cond, currency }
+fn raw_parts<'a>(
+    toks: &'a mut Vec<Tok>,
+    color: &'a mut Option<FormatColor>,
+    cond: &'a mut Option<Cond>,
+    currency: &'a mut bool,
+    lakh_grouping: &'a mut bool,
+    bengali_digits: &'a mut bool,
+) -> RawParts<'a> {
+    RawParts { toks, color, cond, currency, lakh_grouping, bengali_digits }
 }
 
 /// Handles the content of a `[...]` tag.
@@ -411,10 +425,18 @@ fn bracket(p: &mut RawParts<'_>, content: &str) {
         return;
     }
     if let Some(body) = content.strip_prefix('$') {
-        let sym = body.split('-').next().unwrap_or("");
+        let parts: Vec<&str> = body.split('-').collect();
+        let sym = parts.first().copied().unwrap_or("");
         if !sym.is_empty() {
             *p.currency = true;
             push_lit(p.toks, sym);
+        }
+        for part in &parts {
+            let p_lc = part.to_ascii_lowercase();
+            if p_lc == "bn" || p_lc == "bn-bd" || p_lc == "445" || p_lc == "2080445" {
+                *p.bengali_digits = true;
+                *p.lakh_grouping = true;
+            }
         }
         return;
     }
@@ -438,7 +460,7 @@ fn date_part(t: &Tok) -> Option<DatePart> {
 }
 
 fn analyze(raw: Raw) -> Section {
-    let Raw { mut toks, color, cond, currency } = raw;
+    let Raw { mut toks, color, cond, currency, lakh_grouping, bengali_digits } = raw;
     let is_date = toks.iter().any(|t| matches!(t, Tok::Date(_)));
     let has_general = toks.iter().any(|t| matches!(t, Tok::General));
     let mut sec = Section {
@@ -447,6 +469,8 @@ fn analyze(raw: Raw) -> Section {
         cond,
         kind: SecKind::Number,
         thousands: false,
+        lakh_grouping,
+        bengali_digits,
         scale: 0,
         percent: 0,
         has_at: toks.iter().any(|t| matches!(t, Tok::At)),

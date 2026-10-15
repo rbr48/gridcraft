@@ -10,7 +10,7 @@ use crate::keytips::keytip_table;
 use crate::theme::{self, Tokens};
 use crate::widgets::{big_button, color_palette, icon_button, small_button, split_button, toggle_button};
 
-pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate"];
+pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate", "Bangla"];
 
 /// macOS draws the window into the title bar (`with_fullsize_content_view`) and AppKit paints the
 /// traffic lights itself, centred in its standard 28 pt title-bar band. Moving them would take
@@ -219,6 +219,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             keytip(app, ui, sequence, pos2(r.center().x, r.bottom() - 1.0));
                         }
                     }
+                    ui.add_space(6.0);
+                    bangla_tab_bar_button(app, ui);
                 });
             });
             if collapsed {
@@ -243,6 +245,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             "Review" => review(app, ui),
                             "View" => view(app, ui),
                             "Automate" => automate(app, ui),
+                            "Bangla" => bangla(app, ui),
                             "Table Design" => table_design(app, ui),
                             "Chart Design" => chart_design(app, ui),
                             crate::paper_view::TAB => crate::paper_view::ribbon_tab(app, ui),
@@ -2292,6 +2295,159 @@ fn automate(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("about", json!({}));
     }
+}
+
+fn bangla_tab_bar_button(app: &mut SheetApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let mode = app.session.bangla_mode;
+    let is_on = mode != gridcraft_engine::cmd::bangla::BanglaMode::Off;
+    let label = format!("বাং {}", mode.badge());
+
+    let font = theme::ui_font(12.5);
+    let tw = ui.painter().layout_no_wrap(label.clone(), font.clone(), t.text).size().x;
+    let w = tw + 28.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+
+    let bg_color = if is_on {
+        t.accent.gamma_multiply(0.2)
+    } else if resp.hovered() {
+        t.hover
+    } else {
+        t.window
+    };
+    let stroke_color = if is_on { t.accent } else { t.ribbon_border };
+
+    ui.painter().rect_filled(r, 6.0, bg_color);
+    ui.painter().rect_stroke(r, 6.0, Stroke::new(1.0, stroke_color), StrokeKind::Inside);
+
+    let text_color = if is_on { t.accent } else { t.text };
+    let text_pos = pos2(r.left() + 8.0 + tw / 2.0, r.center().y);
+    ui.painter().text(text_pos, Align2::CENTER_CENTER, &label, theme::ui_bold(12.0), text_color);
+
+    let caret_pos = pos2(r.right() - 9.0, r.center().y);
+    ui.painter().text(caret_pos, Align2::CENTER_CENTER, "▾", theme::ui_font(11.0), text_color);
+
+    resp.clone().on_hover_text("Bangla Typing Engine & Tools (F12)\nClick to open quick menu or toggle mode");
+
+    egui::Popup::menu(&resp).show(|ui| {
+        ui.label(egui::RichText::new("Bangla Typing Mode (F12)").heading().color(t.accent));
+        ui.separator();
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Off, "English (Off)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "off"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Phonetic, "বাং Phonetic (Avro)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "phonetic"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Jatiya, "বাং জাতীয় (National / Ctrl+Alt+V)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "jatiya"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Ansi, "বাং ANSI (SutonnyMJ / Ctrl+Alt+B)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "ansi"}));
+        }
+        ui.separator();
+        ui.label(egui::RichText::new("Bengali Formatting").strong());
+        if ui.button("৳ Format as Taka Currency").clicked() {
+            act(app, "bangla.formatCurrency", json!({}));
+        }
+        if ui.button("Convert to Bengali Numerals (১, ২, ৩)").clicked() {
+            act(app, "bangla.toBengaliNumerals", json!({}));
+        }
+        if ui.button("Convert to English Numerals (1, 2, 3)").clicked() {
+            act(app, "bangla.toEnglishNumerals", json!({}));
+        }
+        ui.separator();
+        if ui.button("Bangla Unicode ⇄ ANSI Converter…").clicked() {
+            act(app, "tools.banglaConverter", json!({}));
+        }
+        if ui.button("Open Bangla Ribbon Tab").clicked() {
+            app.ui.ribbon_tab = "Bangla".into();
+            app.ui.ribbon_collapsed = false;
+        }
+    });
+}
+
+fn bangla(app: &mut SheetApp, ui: &mut Ui) {
+    let mode = app.session.bangla_mode;
+    let mode_label = mode.badge();
+
+    // Group 1: Input Mode
+    let btn = big_button(ui, Icon::Spell, mode_label, "Bangla Input Mode (F12)", true);
+    egui::Popup::menu(&btn).show(|ui| {
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Off, "English (Off)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "off"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Phonetic, "বাং Phonetic (Avro)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "phonetic"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Jatiya, "বাং জাতীয় (National / Ctrl+Alt+V)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "jatiya"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Ansi, "বাং ANSI (SutonnyMJ / Ctrl+Alt+B)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "ansi"}));
+        }
+    });
+    ui.vertical(|ui| {
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Phonetic, "Avro / Phonetic").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "phonetic"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Jatiya, "জাতীয় (National)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "jatiya"}));
+        }
+        if ui.selectable_label(mode == gridcraft_engine::cmd::bangla::BanglaMode::Ansi, "ANSI (SutonnyMJ)").clicked() {
+            act(app, "tools.banglaMode", json!({"mode": "ansi"}));
+        }
+    });
+    sep(ui);
+
+    // Group 2: Currency & Numbers
+    if big_button(ui, Icon::Currency, "৳ Currency", "Format selection as ৳ Taka currency", false).clicked() {
+        act(app, "bangla.formatCurrency", json!({}));
+    }
+    ui.vertical(|ui| {
+        if ui.button("১, ২, ৩ Bengali Digits").on_hover_text("Convert selected numbers/text to Bengali numerals").clicked() {
+            act(app, "bangla.toBengaliNumerals", json!({}));
+        }
+        if ui.button("1, 2, 3 English Digits").on_hover_text("Convert selected Bengali numerals back to English digits").clicked() {
+            act(app, "bangla.toEnglishNumerals", json!({}));
+        }
+        if ui.button("Lakh / Crore Grouping").on_hover_text("Format numbers using South Asian lakh/crore commas").clicked() {
+            act(app, "home.numberFormat", json!({"code": "#,##,##0.00"}));
+        }
+    });
+    sep(ui);
+
+    // Group 3: Text & Document Conversion
+    if big_button(ui, Icon::Format, "Bangla\nConverter", "Two-way Unicode ⇄ ANSI (SutonnyMJ) Converter", false).clicked() {
+        act(app, "tools.banglaConverter", json!({}));
+    }
+    ui.vertical(|ui| {
+        if ui.button("Selection → ANSI").on_hover_text("Convert selection from Unicode to SutonnyMJ ANSI").clicked() {
+            act(app, "tools.banglaConvert", json!({"direction": "unicodeToAnsi", "target": "selection"}));
+        }
+        if ui.button("Selection → Unicode").on_hover_text("Convert selection from SutonnyMJ ANSI to Unicode").clicked() {
+            act(app, "tools.banglaConvert", json!({"direction": "ansiToUnicode", "target": "selection"}));
+        }
+        if ui.button("Sheet → Unicode").on_hover_text("Convert entire active sheet from Bijoy/ANSI to Unicode").clicked() {
+            act(app, "tools.banglaConvert", json!({"direction": "ansiToUnicode", "target": "sheet"}));
+        }
+    });
+    sep(ui);
+
+    // Group 4: Font Presets
+    ui.vertical(|ui| {
+        ui.label(egui::RichText::new("Bangla Fonts").font(theme::ui_font(11.5)).color(Tokens::get(ui.ctx()).text_dim));
+        ui.horizontal(|ui| {
+            if ui.button("Kalpurush").on_hover_text("Set font to Kalpurush (Unicode)").clicked() {
+                act(app, "home.fontName", json!({"name": "Kalpurush"}));
+            }
+            if ui.button("Noto Sans").on_hover_text("Set font to Noto Sans Bengali").clicked() {
+                act(app, "home.fontName", json!({"name": "Noto Sans Bengali"}));
+            }
+            if ui.button("SutonnyMJ").on_hover_text("Set font to SutonnyMJ (ANSI)").clicked() {
+                act(app, "home.fontName", json!({"name": "SutonnyMJ"}));
+            }
+        });
+    });
 }
 
 fn table_design(app: &mut SheetApp, ui: &mut Ui) {

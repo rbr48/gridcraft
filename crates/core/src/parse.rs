@@ -71,9 +71,22 @@ fn parse_numeric(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)
 
 /// Signs, currency, thousands separators, percent, exponent.
 fn parse_plain(t: &str) -> Option<(f64, Option<&'static str>)> {
-    let mut s = t;
+    let mut bengali_digits = false;
+    let normalized: String = if t.chars().any(|c| ('\u{09E6}'..='\u{09EF}').contains(&c)) {
+        bengali_digits = true;
+        t.chars()
+            .map(|c| match c {
+                '\u{09E6}'..='\u{09EF}' => (b'0' + (c as u32 - 0x09E6) as u8) as char,
+                other => other,
+            })
+            .collect()
+    } else {
+        t.to_string()
+    };
+    let mut s = normalized.as_str();
     let mut neg = false;
     let mut currency = false;
+    let mut taka = false;
     let mut percent = false;
     if let Some(r) = s.strip_prefix('-') {
         neg = true;
@@ -83,6 +96,14 @@ fn parse_plain(t: &str) -> Option<(f64, Option<&'static str>)> {
     }
     if let Some(r) = s.strip_prefix('$') {
         currency = true;
+        s = r.trim_start();
+        if !neg && let Some(r2) = s.strip_prefix('-') {
+            neg = true;
+            s = r2;
+        }
+    } else if let Some(r) = s.strip_prefix('৳') {
+        currency = true;
+        taka = true;
         s = r.trim_start();
         if !neg && let Some(r2) = s.strip_prefix('-') {
             neg = true;
@@ -98,11 +119,20 @@ fn parse_plain(t: &str) -> Option<(f64, Option<&'static str>)> {
     }
     let has_sep = s.contains(',');
     let digits: String = if has_sep {
-        // Thousands separators must be in groups of three before the decimal point.
+        // Thousands separators must be in groups of three (or South Asian two/three) before decimal point.
         let (int, frac) = s.split_once('.').map_or((s, None), |(a, b)| (a, Some(b)));
         let groups: Vec<&str> = int.split(',').collect();
         let first = groups.first()?;
-        if first.is_empty() || first.len() > 3 || groups.iter().skip(1).any(|g| g.len() != 3) {
+        let last = groups.last()?;
+        if first.is_empty() || first.len() > 3 || last.len() != 3 {
+            return None;
+        }
+        let middle_valid = groups
+            .iter()
+            .skip(1)
+            .take(groups.len().saturating_sub(2))
+            .all(|g| g.len() == 2 || g.len() == 3);
+        if !middle_valid {
             return None;
         }
         let mut d = groups.concat();
@@ -132,8 +162,12 @@ fn parse_plain(t: &str) -> Option<(f64, Option<&'static str>)> {
     if neg {
         n = -n;
     }
-    let fmt = if currency {
+    let fmt = if taka {
+        Some(if digits.contains('.') { "\"৳\"#,##,##0.00" } else { "\"৳\"#,##,##0" })
+    } else if currency {
         Some(if digits.contains('.') { "\"$\"#,##0.00" } else { "\"$\"#,##0" })
+    } else if bengali_digits {
+        Some(if digits.contains('.') { "[$-bn-BD]#,##,##0.00" } else { "[$-bn-BD]#,##,##0" })
     } else if percent {
         Some(if digits.contains('.') { "0.00%" } else { "0%" })
     } else if sci {

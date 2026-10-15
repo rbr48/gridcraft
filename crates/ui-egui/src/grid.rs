@@ -61,6 +61,7 @@ pub enum Drag {
     #[default]
     None,
     Select,
+    Pan,
     Rows(u32),
     Cols(u32),
     /// Reordering one contiguous whole-column selection by its header.
@@ -2131,6 +2132,12 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
                 }
             }
         }
+        let is_touch = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Touch { .. })) || i.multi_touch().is_some());
+        if is_touch {
+            app.grid.drag = Drag::Pan;
+            app.grid.drag_select = false;
+            return;
+        }
         app.grid.drag = Drag::Select;
         app.grid.drag_select = true;
         if resp.drag_started()
@@ -2143,6 +2150,18 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
     }
 
     // Dragging.
+    if resp.dragged() {
+        let is_touch = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Touch { .. })) || i.multi_touch().is_some());
+        if is_touch || matches!(app.grid.drag, Drag::Pan) {
+            app.grid.drag = Drag::Pan;
+            let mut d = -resp.drag_delta() / geo.z;
+            if sh.right_to_left {
+                d.x = -d.x;
+            }
+            scroll_by(app, d);
+            return;
+        }
+    }
     if resp.dragged()
         && let Some(p) = pos
     {
@@ -2251,7 +2270,7 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
                 let _ = app.session.run("object.move", params);
                 coalesce_last_undo(app);
             }
-            Drag::None => {}
+            Drag::None | Drag::Pan => {}
         }
     }
 

@@ -864,3 +864,18 @@ fn closed_brackets_still_hold_their_semicolons() {
     assert_eq!(f("0\\[0", 5.0), "0[5");
     assert_eq!(f("\"[\"0;0", 5.0), "[5");
 }
+
+#[test]
+fn bengali_numerals_and_south_asian_lakh_grouping() {
+    // South Asian lakh/crore grouping with English digits
+    assert_eq!(f("#,##,##0", 1234567.0), "12,34,567");
+    assert_eq!(f("#,##,##0", 12345.0), "12,345");
+    assert_eq!(f("#,##,##0", 123456789.0), "12,34,56,789");
+    assert_eq!(f("\"৳\"#,##,##0.00", 150000.5), "৳1,50,000.50");
+
+    // Bengali numerals with [$-bn-BD]
+    assert_eq!(f("[$-bn-BD]0", 12345.0), "১২৩৪৫");
+    assert_eq!(f("[$-bn-BD]#,##,##0.00", 1234567.89), "১২,৩৪,৫৬৭.৮৯");
+    assert_eq!(f("[$-bn-BD]\"৳\"#,##,##0", 500000.0), "৳৫,০০,০০০");
+}
+

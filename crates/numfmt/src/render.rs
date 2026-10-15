@@ -45,6 +45,15 @@ pub(crate) fn render_text(sec: &Section, text: &str) -> Out {
     out
 }
 
+fn to_bengali_digits(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '0'..='9' => char::from_u32(c as u32 - '0' as u32 + 0x09E6).unwrap_or(c),
+            other => other,
+        })
+        .collect()
+}
+
 /// Renders a number through a General section (literals around the General keyword).
 pub(crate) fn render_general(sec: &Section, v: f64, width: usize) -> Out {
     let mut out = Out::default();
@@ -54,6 +63,9 @@ pub(crate) fn render_general(sec: &Section, v: f64, width: usize) -> Out {
             Tok::Fill(c) => out.fill(*c),
             other => out.push(&other.literal_text()),
         }
+    }
+    if sec.bengali_digits {
+        out.text = to_bengali_digits(&out.text);
     }
     out
 }
@@ -136,13 +148,25 @@ pub(crate) fn render_date(sec: &Section, v: f64, sys: DateSystem) -> Option<Out>
             other => out.push(&other.literal_text()),
         }
     }
+    if sec.bengali_digits {
+        out.text = to_bengali_digits(&out.text);
+    }
     Some(out)
 }
 
 /// Assigns integer digits right-to-left to the placeholders at `idxs`; the leftmost placeholder
 /// takes all remaining digits. `force_zero` shows `0` in the units placeholder when there are no
 /// digits. A blank `?` pads with a space, and so does the thousands separator it would carry.
-fn fill_int(toks: &[Tok], idxs: &[usize], digits: &str, thousands: bool, force_zero: bool, pieces: &mut [String]) {
+fn fill_int(
+    toks: &[Tok],
+    idxs: &[usize],
+    digits: &str,
+    thousands: bool,
+    lakh_grouping: bool,
+    bengali_digits: bool,
+    force_zero: bool,
+    pieces: &mut [String],
+) {
     let ds: Vec<char> = digits.chars().collect();
     let mut rem = ds.len();
     let mut pos = 0usize;
@@ -155,10 +179,20 @@ fn fill_int(toks: &[Tok], idxs: &[usize], digits: &str, thousands: bool, force_z
         };
         let mut rev = String::new();
         let push_digit = |c: char, rev: &mut String, pos: &mut usize| {
-            if thousands && *pos > 0 && pos.is_multiple_of(3) {
+            let is_sep = if lakh_grouping {
+                *pos == 3 || (*pos > 3 && (*pos - 3).is_multiple_of(2))
+            } else {
+                pos.is_multiple_of(3)
+            };
+            if thousands && *pos > 0 && is_sep {
                 rev.push(',');
             }
-            rev.push(c);
+            let out_c = if bengali_digits && c.is_ascii_digit() {
+                char::from_u32(c as u32 - '0' as u32 + 0x09E6).unwrap_or(c)
+            } else {
+                c
+            };
+            rev.push(out_c);
             *pos += 1;
         };
         let take = if leftmost { rem } else { rem.min(1) };
@@ -167,7 +201,12 @@ fn fill_int(toks: &[Tok], idxs: &[usize], digits: &str, thousands: bool, force_z
                 '0' => push_digit('0', &mut rev, &mut pos),
                 _ if force_zero && k == 0 => push_digit('0', &mut rev, &mut pos),
                 '?' => {
-                    if thousands && pos > 0 && pos.is_multiple_of(3) {
+                    let is_sep = if lakh_grouping {
+                        pos == 3 || (pos > 3 && (pos - 3).is_multiple_of(2))
+                    } else {
+                        pos.is_multiple_of(3)
+                    };
+                    if thousands && pos > 0 && is_sep {
                         rev.push(' ');
                     }
                     rev.push(' ');
@@ -187,23 +226,34 @@ fn fill_int(toks: &[Tok], idxs: &[usize], digits: &str, thousands: bool, force_z
     }
 }
 
-fn with_commas(digits: &str, thousands: bool) -> String {
-    if !thousands {
+fn with_commas(digits: &str, thousands: bool, lakh_grouping: bool, bengali_digits: bool) -> String {
+    if !thousands && !bengali_digits {
         return digits.to_string();
     }
     let n = digits.chars().count();
-    let mut s = String::with_capacity(n + n / 3);
+    let mut s = String::with_capacity(n + n / 2);
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (n - i).is_multiple_of(3) {
+        let rem = n - i;
+        let is_sep = if lakh_grouping {
+            rem == 3 || (rem > 3 && (rem - 3).is_multiple_of(2))
+        } else {
+            rem.is_multiple_of(3)
+        };
+        if thousands && i > 0 && is_sep {
             s.push(',');
         }
-        s.push(c);
+        let out_c = if bengali_digits && c.is_ascii_digit() {
+            char::from_u32(c as u32 - '0' as u32 + 0x09E6).unwrap_or(c)
+        } else {
+            c
+        };
+        s.push(out_c);
     }
     s
 }
 
 /// Fraction-digit placeholders: trailing zeros show as `0`, nothing (`#`) or a space (`?`).
-fn fill_frac(toks: &[Tok], idxs: &[usize], frac: &str, pieces: &mut [String]) {
+fn fill_frac(toks: &[Tok], idxs: &[usize], frac: &str, bengali_digits: bool, pieces: &mut [String]) {
     let fd: Vec<char> = frac.chars().collect();
     let last_sig = fd.iter().rposition(|&c| c != '0');
     for (i, &ti) in idxs.iter().enumerate() {
@@ -212,10 +262,16 @@ fn fill_frac(toks: &[Tok], idxs: &[usize], frac: &str, pieces: &mut [String]) {
             _ => '0',
         };
         let s = if last_sig.is_some_and(|l| i <= l) {
-            fd.get(i).copied().unwrap_or('0').to_string()
+            let c = fd.get(i).copied().unwrap_or('0');
+            let out_c = if bengali_digits && c.is_ascii_digit() {
+                char::from_u32(c as u32 - '0' as u32 + 0x09E6).unwrap_or(c)
+            } else {
+                c
+            };
+            out_c.to_string()
         } else {
             match ph {
-                '0' => "0".into(),
+                '0' => (if bengali_digits { "০" } else { "0" }).into(),
                 '?' => " ".into(),
                 _ => String::new(),
             }
@@ -309,7 +365,7 @@ pub(crate) fn render_number(sec: &Section, v: f64) -> Out {
                     if let Some(b) = before.get_mut(first) {
                         *b = sign.to_string();
                     }
-                    fill_int(toks, &exp_idx, &digits, false, false, &mut pieces);
+                    fill_int(toks, &exp_idx, &digits, false, false, sec.bengali_digits, false, &mut pieces);
                 }
                 None => {
                     if let Some(p) = pieces.get_mut(e_at) {
@@ -322,15 +378,15 @@ pub(crate) fn render_number(sec: &Section, v: f64) -> Out {
             fixed(x, frac_idx.len())
         };
         zero = int_s.chars().chain(frac_s.chars()).all(|c| c == '0');
-        fill_int(toks, &int_idx, &int_s, sec.thousands, false, &mut pieces);
+        fill_int(toks, &int_idx, &int_s, sec.thousands, sec.lakh_grouping, sec.bengali_digits, false, &mut pieces);
         if int_idx.is_empty()
             && !int_s.is_empty()
             && let Some(p) = point.or(exp)
             && let Some(b) = before.get_mut(p)
         {
-            *b = with_commas(&int_s, sec.thousands);
+            *b = with_commas(&int_s, sec.thousands, sec.lakh_grouping, sec.bengali_digits);
         }
-        fill_frac(toks, &frac_idx, &frac_s, &mut pieces);
+        fill_frac(toks, &frac_idx, &frac_s, sec.bengali_digits, &mut pieces);
         if let Some(p) = point
             && let Some(s) = pieces.get_mut(p)
         {
@@ -480,7 +536,7 @@ fn render_fraction(sec: &Section, x: f64, pieces: &mut [String], lits: &mut [Opt
     let whole_s = if whole >= 1.0 { fixed(whole, 0).0 } else { String::new() };
     let num_zero_ph = num_idx.iter().any(|&i| toks.get(i) == Some(&Tok::Digit('0')));
     if has_whole && num == 0 && !num_zero_ph {
-        fill_int(toks, &whole_idx, &whole_s, sec.thousands, true, pieces);
+        fill_int(toks, &whole_idx, &whole_s, sec.thousands, sec.lakh_grouping, sec.bengali_digits, true, pieces);
         let spaces = has_q(&whole_idx) || has_q(&num_idx) || has_q(&den_idx);
         blank_range(toks, sep_start..den_end, spaces, pieces, lits);
         return;
@@ -489,14 +545,14 @@ fn render_fraction(sec: &Section, x: f64, pieces: &mut [String], lits: &mut [Opt
         // A zero value shows `0` in a `?` or `0` units place, nothing in a `#` one.
         let units_hash = whole_idx.last().is_some_and(|&i| toks.get(i) == Some(&Tok::Digit('#')));
         let force = whole_s.is_empty() && num == 0 && !units_hash;
-        fill_int(toks, &whole_idx, &whole_s, sec.thousands, force, pieces);
+        fill_int(toks, &whole_idx, &whole_s, sec.thousands, sec.lakh_grouping, sec.bengali_digits, force, pieces);
         let whole_shown = whole_idx.iter().any(|&i| pieces.get(i).is_some_and(|p| p.chars().any(|c| c.is_ascii_digit())));
         if !whole_shown {
             let spaces = has_q(&whole_idx) || has_q(&num_idx);
             blank_range(toks, sep_start..num_start, spaces, pieces, lits);
         }
     }
-    fill_int(toks, &num_idx, &num.to_string(), false, true, pieces);
+    fill_int(toks, &num_idx, &num.to_string(), false, false, sec.bengali_digits, true, pieces);
     if let Some(p) = pieces.get_mut(slash) {
         *p = "/".into();
     }

@@ -2372,6 +2372,148 @@ pub fn normalize_bijoy_workbook(wb: &mut gridcraft_model::Workbook) {
     }
 }
 
+fn cmd_bangla_format_currency(s: &mut Session, p: &Json) -> Result<Json> {
+    let code = p.get("code").and_then(|v| v.as_str()).unwrap_or("_(\"৳\"* #,##,##0.00_);_(\"৳\"* \\(#,##,##0.00\\);_(\"৳\"* \"-\"??_);_(@_)");
+    s.execute("home.numberFormat", json!({"code": code}))?;
+    Ok(json!({"formatted": true}))
+}
+
+fn cmd_bangla_to_bengali_numerals(s: &mut Session, _p: &Json) -> Result<Json> {
+    let d = s.doc_mut()?;
+    let sheet_idx = d.wb.active_sheet;
+    let ranges: Vec<RangeRef> = if d.selection.ranges.is_empty() {
+        vec![RangeRef::cell(d.selection.active)]
+    } else {
+        d.selection.ranges.clone()
+    };
+
+    let count = edit(s, |cx| {
+        let mut converted_count = 0usize;
+        let mut style_cache = std::collections::HashMap::new();
+
+        for r in ranges {
+            let cells_to_convert: Vec<(CellRef, Value, StyleId)> = {
+                let sh = match cx.wb.sheet(sheet_idx) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                sh.cells
+                    .iter_range(r)
+                    .map(|(c, cell)| (c, cell.value.clone(), cell.style))
+                    .collect()
+            };
+
+            for (c, val, style_id) in cells_to_convert {
+                match val {
+                    Value::Text(t) if t.chars().any(|ch| ch.is_ascii_digit()) => {
+                        let new_t: String = t
+                            .chars()
+                            .map(|ch| match ch {
+                                '0'..='9' => char::from_u32(ch as u32 - '0' as u32 + 0x09E6).unwrap_or(ch),
+                                other => other,
+                            })
+                            .collect();
+                        if let Some(cell) = cx.sheet_mut(sheet_idx)?.cells.get_mut(c) {
+                            cell.value = Value::text(new_t);
+                            cx.changed.push((sheet_idx, c));
+                            converted_count += 1;
+                        }
+                    }
+                    Value::Number(_) => {
+                        let new_style = *style_cache.entry(style_id).or_insert_with(|| {
+                            let cur_fmt = cx.wb.styles.get(style_id).num_fmt.as_str().to_string();
+                            let new_fmt = if cur_fmt == "General" {
+                                "[$-bn-BD]#,##,##0.00".to_string()
+                            } else if !cur_fmt.contains("$-bn") {
+                                format!("[$-bn-BD]{cur_fmt}")
+                            } else {
+                                cur_fmt
+                            };
+                            cx.wb.styles.derive(style_id, |st| st.num_fmt = gridcraft_model::NumFmt::new(&new_fmt))
+                        });
+                        if let Some(cell) = cx.sheet_mut(sheet_idx)?.cells.get_mut(c) {
+                            cell.style = new_style;
+                            cx.changed.push((sheet_idx, c));
+                            converted_count += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(converted_count)
+    })?;
+
+    Ok(json!({"converted": true, "count": count}))
+}
+
+fn cmd_bangla_to_english_numerals(s: &mut Session, _p: &Json) -> Result<Json> {
+    let d = s.doc_mut()?;
+    let sheet_idx = d.wb.active_sheet;
+    let ranges: Vec<RangeRef> = if d.selection.ranges.is_empty() {
+        vec![RangeRef::cell(d.selection.active)]
+    } else {
+        d.selection.ranges.clone()
+    };
+
+    let count = edit(s, |cx| {
+        let mut converted_count = 0usize;
+        let mut style_cache = std::collections::HashMap::new();
+
+        for r in ranges {
+            let cells_to_convert: Vec<(CellRef, Value, StyleId)> = {
+                let sh = match cx.wb.sheet(sheet_idx) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                sh.cells
+                    .iter_range(r)
+                    .map(|(c, cell)| (c, cell.value.clone(), cell.style))
+                    .collect()
+            };
+
+            for (c, val, style_id) in cells_to_convert {
+                match val {
+                    Value::Text(t) if t.chars().any(|ch| ('\u{09E6}'..='\u{09EF}').contains(&ch)) => {
+                        let new_t: String = t
+                            .chars()
+                            .map(|ch| match ch {
+                                '\u{09E6}'..='\u{09EF}' => (b'0' + (ch as u32 - 0x09E6) as u8) as char,
+                                other => other,
+                            })
+                            .collect();
+                        if let Some(cell) = cx.sheet_mut(sheet_idx)?.cells.get_mut(c) {
+                            cell.value = Value::text(new_t);
+                            cx.changed.push((sheet_idx, c));
+                            converted_count += 1;
+                        }
+                    }
+                    Value::Number(_) => {
+                        let new_style = *style_cache.entry(style_id).or_insert_with(|| {
+                            let cur_fmt = cx.wb.styles.get(style_id).num_fmt.as_str().to_string();
+                            if cur_fmt.contains("$-bn") {
+                                let new_fmt = cur_fmt.replace("[$-bn-BD]", "").replace("[$-bn]", "");
+                                cx.wb.styles.derive(style_id, |st| st.num_fmt = gridcraft_model::NumFmt::new(&new_fmt))
+                            } else {
+                                style_id
+                            }
+                        });
+                        if let Some(cell) = cx.sheet_mut(sheet_idx)?.cells.get_mut(c) {
+                            cell.style = new_style;
+                            cx.changed.push((sheet_idx, c));
+                            converted_count += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(converted_count)
+    })?;
+
+    Ok(json!({"converted": true, "count": count}))
+}
+
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
@@ -2418,6 +2560,33 @@ pub fn specs() -> Vec<CommandSpec> {
             "{}",
             always,
             cmd_bangla_converter
+        ),
+        cmd!(
+            "bangla.formatCurrency",
+            "Format as ৳ Taka Currency",
+            ["Bangla", "Number"],
+            None,
+            r#"{"code"?: string}"#,
+            has_doc,
+            cmd_bangla_format_currency
+        ),
+        cmd!(
+            "bangla.toBengaliNumerals",
+            "Convert Selection to Bengali Numerals",
+            ["Bangla", "Number"],
+            None,
+            "{}",
+            has_doc,
+            cmd_bangla_to_bengali_numerals
+        ),
+        cmd!(
+            "bangla.toEnglishNumerals",
+            "Convert Selection to English Numerals",
+            ["Bangla", "Number"],
+            None,
+            "{}",
+            has_doc,
+            cmd_bangla_to_english_numerals
         ),
     ]
 }
@@ -2884,4 +3053,42 @@ mod tests {
         let st = wb.styles.get(a1.style);
         assert_eq!(st.font.name, "Kalpurush");
     }
+
+    #[test]
+    fn test_bangla_currency_and_numerals_commands() {
+        let mut s = Session::new();
+        s.new_workbook();
+
+        // 1. Format Currency
+        s.execute("cell.set", json!({"cell": "A1", "input": 50000.0})).unwrap();
+        s.execute("selection.set", json!({"range": "A1"})).unwrap();
+        let r_cur = s.execute("bangla.formatCurrency", json!({})).unwrap();
+        assert!(r_cur.is_object());
+
+        let doc = s.doc().unwrap();
+        let sh = doc.wb.active().unwrap();
+        let a1_style = doc.wb.styles.get(sh.style_id(CellRef::parse("A1").unwrap()));
+        assert!(a1_style.num_fmt.as_str().contains('৳'));
+
+        // 2. Convert text digits to Bengali numerals
+        s.execute("cell.set", json!({"cell": "A2", "input": "Room 102, Roll 45"})).unwrap();
+        s.execute("selection.set", json!({"range": "A2"})).unwrap();
+        let r_bn = s.execute("bangla.toBengaliNumerals", json!({})).unwrap();
+        assert_eq!(r_bn["converted"], true);
+        assert_eq!(r_bn["count"], 1);
+
+        let doc2 = s.doc().unwrap();
+        let sh2 = doc2.wb.active().unwrap();
+        assert_eq!(sh2.value(CellRef::parse("A2").unwrap()), Value::text("Room ১০২, Roll ৪৫"));
+
+        // 3. Convert back to English numerals
+        let r_en = s.execute("bangla.toEnglishNumerals", json!({})).unwrap();
+        assert_eq!(r_en["converted"], true);
+        assert_eq!(r_en["count"], 1);
+
+        let doc3 = s.doc().unwrap();
+        let sh3 = doc3.wb.active().unwrap();
+        assert_eq!(sh3.value(CellRef::parse("A2").unwrap()), Value::text("Room 102, Roll 45"));
+    }
 }
+
